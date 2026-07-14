@@ -1,0 +1,16 @@
+,,With RF,With RF,With RF,With RF,Without RF,Without RF,Without RF,Without RF
+,,Total kg CO2e per unit,kg CO2e of CO2 per unit,kg CO2e of CH4 per unit,kg CO2e of N2O per unit,Total kg CO2e per unit,kg CO2e of CO2 per unit,kg CO2e of CH4 per unit,kg CO2e of N2O per unit
+"Domestic, to/from UK",Average passenger,0.24587,0.24455,0.0001,0.00122,0.13003,0.12871,0.0001,0.00122
+"Short-haul, to/from UK",Average passenger,0.15353,0.15276,0.00001,0.00076,0.08117,0.0804,0.00001,0.00076
+"Short-haul, to/from UK",Economy class,0.15102,0.15026,0.00001,0.00075,0.07984,0.07908,0.00001,0.00075
+"Short-haul, to/from UK",Business class,0.22652,0.22539,0.00001,0.00112,0.11976,0.11863,0.00001,0.00112
+"Long-haul, to/from UK",Average passenger,0.19309,0.19212,0.00001,0.00096,0.10208,0.10111,0.00001,0.00096
+"Long-haul, to/from UK",Economy class,0.14787,0.14713,0.00001,0.00073,0.07818,0.07744,0.00001,0.00073
+"Long-haul, to/from UK",Premium economy class,0.23659,0.23541,0.00001,0.00117,0.12508,0.1239,0.00001,0.00117
+"Long-haul, to/from UK",Business class,0.42882,0.42668,0.00002,0.00212,0.22671,0.22457,0.00002,0.00212
+"Long-haul, to/from UK",First class,0.59147,0.58852,0.00002,0.00293,0.3127,0.30975,0.00002,0.00293
+"International, to/from non-UK",Average passenger,0.18362,0.1827,0.00001,0.00091,0.09708,0.09616,0.00001,0.00091
+"International, to/from non-UK",Economy class,0.140625,0.13992,0.000005,0.0007,0.074345,0.07364,0.000005,0.0007
+"International, to/from non-UK",Premium economy class,0.225,0.22388,0.00001,0.00111,0.11895,0.11783,0.00001,0.00111
+"International, to/from non-UK",Business class,0.40781,0.40578,0.00001,0.00202,0.2156,0.21357,0.00001,0.00202
+"International, to/from non-UK",First class,0.56251,0.5597,0.00002,0.00279,0.29739,0.29458,0.00002,0.00279

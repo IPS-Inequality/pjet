@@ -1,0 +1,23 @@
+name = "pjet"
+main = "workers/d1-api.js"
+compatibility_date = "2026-06-23"
+
+# This worker is intentionally disabled until its required secret is configured:
+#   npx wrangler secret put PJET_API_TOKEN
+# Call its API with: Authorization: Bearer <PJET_API_TOKEN>
+# Never put the token in this file or commit it.
+
+[[d1_databases]]
+binding = "EVENTS_DB"
+database_name = "pjet-events"
+database_id = "replace-with-events-d1-id"
+
+[[d1_databases]]
+binding = "AIRPORTS_DB"
+database_name = "pjet-airports"
+database_id = "replace-with-airports-d1-id"
+
+[[d1_databases]]
+binding = "AIRCRAFT_DB"
+database_name = "pjet-aircraft"
+database_id = "replace-with-aircraft-d1-id"

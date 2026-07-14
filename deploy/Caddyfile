@@ -1,0 +1,5 @@
+# Set PJET_DOMAIN to the real public hostname before loading this template.
+# Do not commit production domains or origin IP addresses.
+{$PJET_DOMAIN:pjet.example.org} {
+	reverse_proxy 127.0.0.1:8080
+}

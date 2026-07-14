@@ -1,0 +1,24 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+.wrangler/
+*.log
+data/
+exports/
+.claude/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Rust build output
+rust/pjet/target/

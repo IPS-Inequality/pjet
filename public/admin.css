@@ -1,0 +1,121 @@
+.admin-shell {
+  max-width: 920px;
+}
+
+.button-link {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #b9c2bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #27312d;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+.button-link:focus-visible {
+  outline: 2px solid #2d6cdf;
+  outline-offset: 2px;
+}
+
+.admin-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-content {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) max-content;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+}
+
+.admin-form label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  color: #59635e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-form input {
+  width: 100%;
+  height: 36px;
+  border: 1px solid #c4ccc6;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202427;
+  padding: 0 9px;
+}
+
+.voucher-form {
+  grid-template-columns: minmax(0, 1fr) max-content;
+  border-bottom: 1px solid #edf0ed;
+}
+
+.admin-note,
+.admin-empty {
+  margin: 0;
+  padding: 0 14px 14px;
+  color: #68726d;
+  font-size: 12px;
+}
+
+.voucher-table code {
+  color: #202427;
+  font: 600 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
+}
+
+.voucher-table td:first-child {
+  width: auto;
+  color: inherit;
+  font-weight: inherit;
+}
+
+.voucher-table .numeric-cell {
+  width: 110px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.voucher-table .action-cell {
+  width: 100px;
+  text-align: right;
+}
+
+.danger-button {
+  min-height: 32px;
+  border-color: #d3a79f;
+  color: #8f2f22;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .admin-form,
+  .voucher-form {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-form button {
+    width: 100%;
+  }
+}

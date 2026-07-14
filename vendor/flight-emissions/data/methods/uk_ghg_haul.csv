@@ -1,0 +1,246 @@
+Haul,CNTRY_NAME,ISO 3166-1 alpha-2
+D,"Man, Isle of",IM
+D,United Kingdom,GB
+Long,Afghanistan,AF
+Long,American Samoa,AS
+Long,Angola,AO
+Long,Anguilla,AI
+Long,Antarctica,AQ
+Long,Antigua and Barbuda,AG
+Long,Argentina,AR
+Long,Armenia,AM
+Long,Aruba,AW
+Long,Australia,AU
+Long,Azerbaijan,AZ
+Long,Bahamas,BS
+Long,Bahrain,BH
+Long,Bangladesh,BD
+Long,Barbados,BB
+Long,Belize,BZ
+Long,Benin,BJ
+Long,Bermuda,BM
+Long,Bhutan,BT
+Long,Bolivia,BO
+Long,Botswana,BW
+Long,Bouvet Island,BV
+Long,Brazil,BR
+Long,British Indian Ocean Territory,IO
+Long,British Virgin Islands,VG
+Long,Brunei,BN
+Long,Burkina Faso,BF
+Long,Burundi,BI
+Long,Byelarus,BY
+Long,Cambodia,KH
+Long,Cameroon,CM
+Long,Canada,CA
+Long,Cape Verde,CV
+Long,Cayman Islands,KY
+Long,Central African Republic,CF
+Long,Chad,TD
+Long,Chile,CL
+Long,China,CN
+Long,Christmas Island,CX
+Long,Cocos (Keeling) Islands,CC
+Long,Colombia,CO
+Long,Comoros,KM
+Long,Cook Islands,CK
+Long,Costa Rica,CR
+Long,Cuba,CU
+Long,Democratic Republic of Congo,CD
+Long,Djibouti,DJ
+Long,Dominica,DM
+Long,Dominican Republic,DO
+Long,Ecuador,EC
+Long,El Salvador,SV
+Long,Equatorial Guinea,GQ
+Long,Eritrea,ER
+Long,Ethiopia,ET
+Long,Falkland Islands,FK
+Long,Federated States of Micronesia,FM
+Long,Fiji,FJ
+Long,French Guiana,GF
+Long,French Polynesia,PF
+Long,French Southern & Antarctic Lands,TF
+Long,Gabon,GA
+Long,Gambia,GM
+Long,Georgia,GE
+Long,Ghana,GH
+Long,Grenada,GD
+Long,Guadeloupe,GP
+Long,Guam,GU
+Long,Guatemala,GT
+Long,Guinea,GN
+Long,Guinea-Bissau,GW
+Long,Guyana,GY
+Long,Haiti,HT
+Long,Heard Island & McDonald Islands,HM
+Long,Honduras,HN
+Long,India,IN
+Long,Indonesia,ID
+Long,Iran,IR
+Long,Iraq,IQ
+Long,Israel,IL
+Long,Ivory Coast,CI
+Long,Jamaica,JM
+Long,Japan,JP
+Long,Johnston Atoll,UM
+Long,Jordan,JO
+Long,Kazakhstan,KZ
+Long,Kenya,KE
+Long,Kiribati,KI
+Long,Kuwait,KW
+Long,Kyrgyzstan,KG
+Long,Laos,LA
+Long,Lebanon,LB
+Long,Lesotho,LS
+Long,Liberia,LR
+Long,Macau,MO
+Long,Madagascar,MG
+Long,Malawi,MW
+Long,Malaysia,MY
+Long,Maldives,MV
+Long,Mali,ML
+Long,Marshall Islands,MH
+Long,Martinique,MQ
+Long,Mauritania,MR
+Long,Mauritius,MU
+Long,Mayotte,YT
+Long,Mexico,MX
+Long,Moldova,MD
+Long,Mongolia,MN
+Long,Montserrat,MS
+Long,Mozambique,MZ
+Long,Myanmar,MM
+Long,Namibia,NA
+Long,Nauru,NR
+Long,Nepal,NP
+Long,Netherlands Antilles,BQ
+Long,New Caledonia,NC
+Long,New Zealand,NZ
+Long,Nicaragua,NI
+Long,Niger,NE
+Long,Nigeria,NG
+Long,Niue,NU
+Long,Norfolk Island,NF
+Long,North Korea,KP
+Long,Northern Mariana Islands,MP
+Long,Oman,OM
+Long,Pacific Islands (Palau),PW
+Long,Pakistan,PK
+Long,Panama,PA
+Long,Papua New Guinea,PG
+Long,Paraguay,PY
+Long,Peru,PE
+Long,Philippines,PH
+Long,Pitcairn Islands,PN
+Long,Puerto Rico,PR
+Long,Qatar,QA
+Long,Republic of Congo,CD
+Long,Reunion,RE
+Long,Russia,RU
+Long,Rwanda,RW
+Long,Saint-Barthélemy,BL
+Long,Saint-Martin (French part),MF
+Long,Sao Tome and Principe,ST
+Long,Saudi Arabia,SA
+Long,Senegal,SN
+Long,Seychelles,SC
+Long,Sierra Leone,SL
+Long,Singapore,SG
+Long,Solomon Islands,SB
+Long,Somalia,SO
+Long,South Africa,ZA
+Long,South Georgia and the South Sandwich Is,GS
+Long,South Korea,KR
+Long,South Sudan,SS
+Long,Sri Lanka,LK
+Long,St. Helena,SH
+Long,St. Kitts and Nevis,KN
+Long,St. Lucia,LC
+Long,St. Pierre and Miquelon,PM
+Long,St. Vincent and the Grenadines,VC
+Long,Sudan,SD
+Long,Suriname,SR
+Long,Swaziland,SZ
+Long,Syria,SY
+Long,Taiwan,TW
+Long,Tajikistan,TJ
+Long,Tanzania,TZ
+Long,Thailand,TH
+Long,Timor-Leste,TL
+Long,Togo,TG
+Long,Tokelau,TK
+Long,Tonga,TO
+Long,Trinidad and Tobago,TT
+Long,Turkmenistan,TM
+Long,Turks and Caicos Islands,TC
+Long,Tuvalu,TV
+Long,Uganda,UG
+Long,Ukraine,UA
+Long,United Arab Emirates,AE
+Long,United States,US
+Long,Uruguay,UY
+Long,Uzbekistan,UZ
+Long,Vanuatu,VU
+Long,Venezuela,VE
+Long,Vietnam,VN
+Long,Virgin Islands,VG
+Long,Wallis and Futuna,WF
+Long,West Bank & Gaza Strip,PS
+Long,Western Sahara,EH
+Long,Western Samoa,WS
+Long,Yemen,YE
+Long,Zambia,ZM
+Long,Zimbabwe,ZW
+Short,Albania,AL
+Short,Algeria,DZ
+Short,Andorra,AD
+Short,Austria,AT
+Short,Belgium,BE
+Short,Bosnia and Herzegovina,BA
+Short,Bulgaria,BG
+Short,Croatia,HR
+Short,Cyprus,CY
+Short,Czech Republic,CZ
+Short,Denmark,DK
+Short,Egypt,EG
+Short,Estonia,EE
+Short,Faroe Islands,FO
+Short,Finland,FI
+Short,France,FR
+Short,Germany,DE
+Short,Gibraltar,GI
+Short,Greece,GR
+Short,Greenland,GL
+Short,Guernsey,GG
+Short,Hungary,HU
+Short,Iceland,IS
+Short,Ireland,IE
+Short,Italy,IT
+Short,Jersey,JE
+Short,Kosovo,XK
+Short,Latvia,LV
+Short,Libya,LY
+Short,Liechtenstein,LI
+Short,Lithuania,LT
+Short,Luxembourg,LU
+Short,Macedonia,MK
+Short,Malta,MT
+Short,Monaco,MC
+Short,Montenegro,ME
+Short,Morocco,MA
+Short,Netherlands,NL
+Short,Norway,NO
+Short,Poland,PL
+Short,Portugal,PT
+Short,Romania,RO
+Short,San Marino,SM
+Short,Serbia,RS
+Short,Slovakia,SK
+Short,Slovenia,SI
+Short,Spain,ES
+Short,Svalbard & Jan Mayen,SJ
+Short,Sweden,SE
+Short,Switzerland,CH
+Short,Tunisia,TN
+Short,Turkey,TR

@@ -1,0 +1,188 @@
+continent,region,country,country_code
+Africa,North Africa,Algeria,DZ
+Africa,North Africa,Morocco,MA
+Africa,North Africa,Egypt,EG
+Africa,North Africa,Tunisia,TN
+Africa,North Africa,Libya,LY
+Africa,Sub Saharan Africa,Benin,BJ
+Africa,Sub Saharan Africa,Madagascar,MG
+Africa,Sub Saharan Africa,Botswana,BW
+Africa,Sub Saharan Africa,Malawi,MW
+Africa,Sub Saharan Africa,Burkina Faso,BF
+Africa,Sub Saharan Africa,Mali,ML
+Africa,Sub Saharan Africa,Burundi,BI
+Africa,Sub Saharan Africa,Mauritania,MR
+Africa,Sub Saharan Africa,Cabo Verde,CV
+Africa,Sub Saharan Africa,Mauritius,MU
+Africa,Sub Saharan Africa,Cameroon,CM
+Africa,Sub Saharan Africa,Mozambique,MZ
+Africa,Sub Saharan Africa,Central African Republic,CF
+Africa,Sub Saharan Africa,Namibia,NA
+Africa,Sub Saharan Africa,Chad,TD
+Africa,Sub Saharan Africa,Niger,NE
+Africa,Sub Saharan Africa,Comoros,KM
+Africa,Sub Saharan Africa,Nigeria,NG
+Africa,Sub Saharan Africa,Congo,CG
+Africa,Sub Saharan Africa,Rwanda,RW
+Africa,Sub Saharan Africa,Côte d'Ivoire,CI
+Africa,Sub Saharan Africa,Sao Tome and Principe,ST
+Africa,Sub Saharan Africa,Democratic Republic of the Congo,CD
+Africa,Sub Saharan Africa,Senegal,SN
+Africa,Sub Saharan Africa,Djibouti,DJ
+Africa,Sub Saharan Africa,Seychelles,SC
+Africa,Sub Saharan Africa,Equatorial Guinea,GQ
+Africa,Sub Saharan Africa,Sierra Leone,SL
+Africa,Sub Saharan Africa,Eritrea,ER
+Africa,Sub Saharan Africa,Somalia,SO
+Africa,Sub Saharan Africa,Ethiopia,ET
+Africa,Sub Saharan Africa,South Africa,ZA
+Africa,Sub Saharan Africa,Gabon,GA
+Africa,Sub Saharan Africa,South Sudan,SS
+Africa,Sub Saharan Africa,Gambia,GM
+Africa,Sub Saharan Africa,Sudan,SD
+Africa,Sub Saharan Africa,Ghana,GH
+Africa,Sub Saharan Africa,Swaziland,SZ
+Africa,Sub Saharan Africa,Guinea,GN
+Africa,Sub Saharan Africa,Togo,TG
+Africa,Sub Saharan Africa,Guinea-Bissau,GW
+Africa,Sub Saharan Africa,Uganda,UG
+Africa,Sub Saharan Africa,Kenya,KE
+Africa,Sub Saharan Africa,United Republic of Tanzania,TZ
+Africa,Sub Saharan Africa,Lesotho,LS
+Africa,Sub Saharan Africa,Zambia,ZM
+Africa,Sub Saharan Africa,Liberia,LR
+Africa,Sub Saharan Africa,Zimbabwe,ZW
+Asia/Pacific,Central/South West Asia,Afghanistan,AF
+Asia/Pacific,Central/South West Asia,Myanmar,MM
+Asia/Pacific,Central/South West Asia,Bangladesh,BD
+Asia/Pacific,Central/South West Asia,Nepal,NP
+Asia/Pacific,Central/South West Asia,Bhutan,BT
+Asia/Pacific,Central/South West Asia,Pakistan,PK
+Asia/Pacific,Central/South West Asia,China,CN
+Asia/Pacific,Central/South West Asia,Sri Lanka,LK
+Asia/Pacific,Central/South West Asia,India,IN
+Asia/Pacific,Central/South West Asia,Tajikistan,TJ
+Asia/Pacific,Central/South West Asia,Kazakhstan,KZ
+Asia/Pacific,Central/South West Asia,Turkmenistan,TM
+Asia/Pacific,Central/South West Asia,Kyrgyzstan,KG
+Asia/Pacific,Central/South West Asia,Uzbekistan,UZ
+Asia/Pacific,Central/South West Asia,Mongolia,MN
+Asia/Pacific,North Asia,Democratic People's Republic of Korea,KP
+Asia/Pacific,North Asia,Japan,JP
+Asia/Pacific,North Asia,Republic of Korea,KR
+Asia/Pacific,Pacific South East Asia,Australia,AU
+Asia/Pacific,Pacific South East Asia,Palau,PW
+Asia/Pacific,Pacific South East Asia,Brunei Darussalam,BN
+Asia/Pacific,Pacific South East Asia,Papua New Guinea,PG
+Asia/Pacific,Pacific South East Asia,Cambodia,KH
+Asia/Pacific,Pacific South East Asia,Philippines,PH
+Asia/Pacific,Pacific South East Asia,Cook Islands,CK
+Asia/Pacific,Pacific South East Asia,Samoa,WS
+Asia/Pacific,Pacific South East Asia,Fiji,FJ
+Asia/Pacific,Pacific South East Asia,Singapore,SG
+Asia/Pacific,Pacific South East Asia,Indonesia,ID
+Asia/Pacific,Pacific South East Asia,Solomon Islands,SB
+Asia/Pacific,Pacific South East Asia,Kiribati,KI
+Asia/Pacific,Pacific South East Asia,Thailand,TH
+Asia/Pacific,Pacific South East Asia,Lao People's Democratic Republic,LA
+Asia/Pacific,Pacific South East Asia,Tonga,TO
+Asia/Pacific,Pacific South East Asia,Malaysia,MY
+Asia/Pacific,Pacific South East Asia,Vanuatu,VU
+Asia/Pacific,Pacific South East Asia,Maldives,MV
+Asia/Pacific,Pacific South East Asia,Viet Nam,VN
+Asia/Pacific,Pacific South East Asia,Marshall Islands,MH
+Asia/Pacific,Pacific South East Asia,Micronesia (Federated States of),FM
+Asia/Pacific,Pacific South East Asia,Nauru,NR
+Asia/Pacific,Pacific South East Asia,Timor-Leste,TL
+Asia/Pacific,Pacific South East Asia,New Zealand,NZ
+Europe,Europe,Albania,AL
+Europe,Europe,Lithuania,LT
+Europe,Europe,Andorra,AD
+Europe,Europe,Luxembourg,LU
+Europe,Europe,Armenia,AM
+Europe,Europe,Malta,MT
+Europe,Europe,Austria,AT
+Europe,Europe,Monaco,MC
+Europe,Europe,Azerbaijan,AZ
+Europe,Europe,Montenegro,ME
+Europe,Europe,Belarus,BY
+Europe,Europe,Netherlands,NL
+Europe,Europe,Belgium,BE
+Europe,Europe,Norway,NO
+Europe,Europe,Bosnia and Herzegovina,BA
+Europe,Europe,Poland,PL
+Europe,Europe,Bulgaria,BG
+Europe,Europe,Portugal,PT
+Europe,Europe,Croatia,HR
+Europe,Europe,Republic of Moldova,MD
+Europe,Europe,Cyprus,CY
+Europe,Europe,Romania,RO
+Europe,Europe,Czech Republic,CZ
+Europe,Europe,Russian Federation,RU
+Europe,Europe,Denmark,DK
+Europe,Europe,San Marino,SM
+Europe,Europe,Estonia,EE
+Europe,Europe,Serbia,RS
+Europe,Europe,Finland,FI
+Europe,Europe,Slovakia,SK
+Europe,Europe,France,FR
+Europe,Europe,Slovenia,SI
+Europe,Europe,Georgia,GE
+Europe,Europe,Spain,ES
+Europe,Europe,Germany,DE
+Europe,Europe,Sweden,SE
+Europe,Europe,Greece,GR
+Europe,Europe,Switzerland,CH
+Europe,Europe,Hungary,HU
+Europe,Europe,The former Yugoslav Republic of Macedonia,MK
+Europe,Europe,Iceland,IS
+Europe,Europe,Turkey,TR
+Europe,Europe,Ireland,IE
+Europe,Europe,Ukraine,UA
+Europe,Europe,Italy,IT
+Europe,Europe,United Kingdom,GB
+Europe,Europe,Latvia,LV
+Latin America/Caribbean,Central America/Caribbean,Antigua and Barbuda,AG
+Latin America/Caribbean,Central America/Caribbean,Haiti,HT
+Latin America/Caribbean,Central America/Caribbean,Bahamas,BS
+Latin America/Caribbean,Central America/Caribbean,Honduras,HN
+Latin America/Caribbean,Central America/Caribbean,Barbados,BB
+Latin America/Caribbean,Central America/Caribbean,Jamaica,JM
+Latin America/Caribbean,Central America/Caribbean,Belize,BZ
+Latin America/Caribbean,Central America/Caribbean,Mexico,MX
+Latin America/Caribbean,Central America/Caribbean,Costa Rica,CR
+Latin America/Caribbean,Central America/Caribbean,Nicaragua,NI
+Latin America/Caribbean,Central America/Caribbean,Cuba,CU
+Latin America/Caribbean,Central America/Caribbean,Panama,PA
+Latin America/Caribbean,Central America/Caribbean,Dominican Republic,DO
+Latin America/Caribbean,Central America/Caribbean,Saint Kitts and Nevis,KN
+Latin America/Caribbean,Central America/Caribbean,El Salvador,SV
+Latin America/Caribbean,Central America/Caribbean,Saint Lucia,LC
+Latin America/Caribbean,Central America/Caribbean,Grenada,GD
+Latin America/Caribbean,Central America/Caribbean,Saint Vincent and the Grenadines,VC
+Latin America/Caribbean,Central America/Caribbean,Guatemala,GT
+Latin America/Caribbean,Central America/Caribbean,Trinidad and Tobago,TT
+Latin America/Caribbean,South America,Argentina,AR
+Latin America/Caribbean,South America,Guyana,GY
+Latin America/Caribbean,South America,Bolivia (Plurinational State of),BO
+Latin America/Caribbean,South America,Paraguay,PY
+Latin America/Caribbean,South America,Brazil,BR
+Latin America/Caribbean,South America,Peru,PE
+Latin America/Caribbean,South America,Chile,CL
+Latin America/Caribbean,South America,Suriname,SR
+Latin America/Caribbean,South America,Colombia,CO
+Latin America/Caribbean,South America,Uruguay,UY
+Latin America/Caribbean,South America,Ecuador,EC
+Latin America/Caribbean,South America,Venezuela (Bolivarian Republic of),VE
+Middle East,Middle East,Bahrain,BH
+Middle East,Middle East,Oman,OM
+Middle East,Middle East,Iran (IslamArabia,IR
+Middle East,Middle East,Israel,IL
+Middle East,Middle East,Syrian Arab Republic,SY
+Middle East,Middle East,Jordan,JO
+Middle East,Middle East,United Arab Emirates,AE
+Middle East,Middle East,Kuwait,KW
+Middle East,Middle East,Yemen,YE
+Middle East,Middle East,Lebanon,LB
+North America,North America,Canada,CA
+North America,North America,United States,US

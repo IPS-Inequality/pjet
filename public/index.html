@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Private Jet Emissions Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  </head>
+  <body class="auth-pending">
+    <div class="loading-bar" id="loadingBar" hidden><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+    <div class="app-shell">
+      <header class="topbar">
+        <span id="status" class="visually-hidden" aria-live="polite">Loading databases</span>
+        <form class="search-form" id="searchForm">
+          <label>
+            <span>Start</span>
+            <input id="startInput" type="datetime-local" required />
+          </label>
+          <label>
+            <span>End</span>
+            <input id="endInput" type="datetime-local" required />
+          </label>
+          <label>
+            <span>Aircraft</span>
+            <select id="aircraftTypeSelect">
+              <option value="">All aircraft</option>
+            </select>
+          </label>
+          <label>
+            <span>Airport</span>
+            <select id="airportTypeSelect">
+              <option value="">All airports</option>
+            </select>
+          </label>
+          <label>
+            <span>Emissions</span>
+            <select id="emissionsMethodologySelect"></select>
+          </label>
+          <button type="submit" class="primary-button" id="searchButton">Search</button>
+          <button
+            type="button"
+            class="icon-button settings-button"
+            id="settingsButton"
+            aria-label="Settings"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path
+                d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.52a2 2 0 0 1-1 1.73l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.73v-.52a2 2 0 0 1 1-1.73l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"
+              />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+        </form>
+      </header>
+
+      <main class="workspace">
+        <section class="map-panel">
+          <div id="map"></div>
+          <div class="bbox-panel">
+            <label><span>Min Lat</span><input id="minLatInput" inputmode="decimal" /></label>
+            <label><span>Min Lon</span><input id="minLonInput" inputmode="decimal" /></label>
+            <label><span>Max Lat</span><input id="maxLatInput" inputmode="decimal" /></label>
+            <label><span>Max Lon</span><input id="maxLonInput" inputmode="decimal" /></label>
+            <button type="button" class="tool-button" id="useMapBoundsButton">Use Map Bounds</button>
+            <button type="button" class="tool-button" id="drawBoundsButton" aria-pressed="false">Draw Bounds</button>
+          </div>
+        </section>
+
+        <aside class="results-panel">
+          <section class="results-view" id="resultsView">
+            <div class="summary-strip">
+              <div><span id="airportCount">0</span><label>Airports</label></div>
+              <div><span id="eventCount">0</span><label>Events</label></div>
+              <div><span id="shownCount">0</span><label>Shown</label></div>
+              <div><span id="queryTime">0 ms</span><label>Query</label></div>
+              <div><span id="emissionsTotal">None</span><label>Total emissions</label></div>
+            </div>
+            <div class="results-mode-toggle" id="resultsModeToggle" role="group" aria-label="Results view">
+              <button type="button" class="mode-button is-active" data-result-mode="flights" aria-pressed="true">Flights</button>
+              <button type="button" class="mode-button" data-result-mode="models" aria-pressed="false">Models</button>
+              <button type="button" class="mode-button" data-result-mode="typical" aria-pressed="false">Typical</button>
+              <button type="button" class="tool-button export-button" id="exportCsvButton" aria-label="Download results CSV">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
+                </svg>
+                <span id="exportCsvLabel">CSV</span>
+              </button>
+            </div>
+            <div class="table-wrap" id="tableWrap">
+              <div class="results-loading" id="resultsLoading" hidden>
+                <div class="loading-indicator" aria-hidden="true"></div>
+                <strong id="loadingStatus">Preparing query</strong>
+                <button type="button" class="loading-cancel-button" id="loadingCancelButton" aria-label="Cancel loading">
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+              <table>
+                <thead>
+                  <tr id="resultsHeader"></tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+              </table>
+            </div>
+            <footer class="pagination">
+              <button type="button" class="tool-button" id="prevPageButton">Prev</button>
+              <span id="pageStatus">Page 0 of 0</span>
+              <button type="button" class="tool-button" id="nextPageButton">Next</button>
+            </footer>
+          </section>
+          <section class="flight-detail-panel" id="flightDetailPanel" aria-labelledby="flightDetailTitle" hidden>
+            <header class="flight-detail-header">
+              <div>
+                <h2 id="flightDetailTitle">Flight Detail</h2>
+                <span id="flightDetailSubtitle"></span>
+              </div>
+              <button type="button" class="icon-button" id="flightDetailCloseButton" aria-label="Close flight detail">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </header>
+            <div class="flight-detail-body" id="flightDetailBody"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <div id="loginOverlay" class="login-overlay">
+      <form id="loginForm" class="login-panel">
+        <h2>Enter Password</h2>
+        <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" />
+        <button type="submit" class="primary-button">Open PJET</button>
+        <div id="loginError" class="login-error" role="alert"></div>
+      </form>
+    </div>
+    <div class="modal-backdrop" id="settingsModal" hidden>
+      <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <header class="settings-header">
+          <h2 id="settingsTitle">Settings</h2>
+          <button type="button" class="icon-button" id="settingsCloseButton" aria-label="Close settings">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        <div class="settings-body">
+          <label class="toggle-row">
+            <span class="toggle-text">Include well-to-tank emissions</span>
+            <input id="includeWttToggle" type="checkbox" checked />
+            <span class="toggle-switch" aria-hidden="true"></span>
+          </label>
+          <div class="settings-meta">
+            <span class="settings-links">
+              <a href="/info" target="_blank" rel="noreferrer">Info</a>
+              <a href="/docs" target="_blank" rel="noreferrer">Docs</a>
+            </span>
+            <span id="appVersion">v0.0.0</span>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,42 @@
+Route Group,Passenger Load Factor,Passenger to Freight Factor
+Africa - Asia/Pacific,0.737,0.8382
+Africa - Middle East,0.741,0.8292
+Africa - North America,0.771,0.9111
+Africa - Central America/Caribbean,0.779,0.8403
+Middle East - Central America/Caribbean,0.779,0.8403
+Africa - South America,0.65,0.8397
+Middle East - South America,0.65,0.8397
+Central America/Caribbean - Europe,0.817,0.8657
+Central America/Caribbean - North America,0.807,0.9317
+Central America/Caribbean - South America,0.797,0.8942
+Central/South West Asia - Europe,0.815,0.6343
+Central/South West Asia - Latin America/Caribbean,0.803,0.8445
+Central/South West Asia - Middle East,0.789,0.8118
+Central/South West Asia - North America,0.833,0.6238
+Central/South West Asia - North Asia,0.712,0.7947
+Central/South West Asia - Pacific South East Asia,0.748,0.8012
+Europe - Middle East,0.745,0.7719
+Europe - North Africa,0.736,0.8199
+Europe - North America,0.831,0.7996
+Europe - North Asia,0.8,0.6343
+Europe - Pacific South East Asia,0.802,0.6343
+Europe - South America,0.849,0.7669
+Europe - Sub Saharan Africa,0.784,0.8199
+Intra Africa,0.661,0.8432
+Intra Central America/Caribbean,0.677,0.9609
+Intra Central/South West Asia,0.698,0.7947
+Intra Europe,0.823,0.9612
+Intra Middle East,0.702,0.8456
+Intra North America,0.791,0.9335
+Intra North Asia,0.753,0.7947
+Intra Pacific South East Asia,0.778,0.7947
+Intra South America,0.771,0.8266
+Latin America/Caribbean - North Asia,0.729,0.8467
+Latin America/Caribbean - Pacific South East Asia,0.729,0.8467
+Middle East - North America,0.839,0.7989
+Middle East - North Asia,0.765,0.8118
+Middle East - Pacific South East Asia,0.765,0.8118
+North America - North Asia,0.823,0.6644
+North America - Pacific South East Asia,0.809,0.8457
+North America - South America,0.826,0.7727
+North Asia - Pacific South East Asia,0.753,0.7947
