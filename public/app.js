@@ -36,6 +36,7 @@ const URL_STATE_DECIMALS = 5;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const DATE_RANGE_REFRESH_MIN_MS = 1000;
 const ABSOLUTE_DATE_TIME_URL_RE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+const EUROCONTROL_NO_UPPER_LIMIT_NM = 999_999;
 
 const els = {
   loginOverlay: document.getElementById("loginOverlay"),
@@ -151,16 +152,33 @@ function formatDuration(milliseconds) {
   return `${(milliseconds / 1000).toFixed(2)} s`;
 }
 
-function formatCo2e(kg) {
+function formatUnit(value, unit, maximumFractionDigits = 2) {
+  return `${Number(value).toLocaleString(undefined, { maximumFractionDigits })}${unit}`;
+}
+
+function formatEmissionsTons(kg) {
   if (!Number.isFinite(kg)) return "None";
-  if (kg >= 1_000_000) return `${formatSignificant(kg / 1_000_000)}kt`;
-  if (kg >= 1_000) return `${formatSignificant(kg / 1_000)}t`;
-  return `${formatSignificant(kg)}kg`;
+  return formatUnit(kg / 1_000, "t");
+}
+
+function formatEmissionsKilotonnes(kg) {
+  if (!Number.isFinite(kg)) return "None";
+  return `${formatSignificant(kg / 1_000_000)}kt`;
+}
+
+function formatEmissionsSummary(kg) {
+  if (!Number.isFinite(kg)) return "None";
+  return Math.abs(kg) >= 1_000_000 ? formatEmissionsKilotonnes(kg) : formatEmissionsTons(kg);
 }
 
 function formatTonsCell(kg, decimals = 2) {
   if (!Number.isFinite(kg)) return "";
   return (kg / 1000).toFixed(decimals);
+}
+
+function formatKilotonnesCell(kg, decimals = 2) {
+  if (!Number.isFinite(kg)) return "";
+  return (kg / 1_000_000).toFixed(decimals);
 }
 
 function formatHoursCell(hours, decimals = 2) {
@@ -190,6 +208,11 @@ function formatDistanceNm(value) {
   return `${formatDecimal(value, 1)} nm`;
 }
 
+function formatCurveSegmentEndNm(value) {
+  if (value === EUROCONTROL_NO_UPPER_LIMIT_NM) return "No upper limit";
+  return formatDistanceNm(value);
+}
+
 function formatDistanceKm(value) {
   if (!Number.isFinite(value)) return "None";
   return `${formatDecimal(value, 1)} km`;
@@ -205,9 +228,14 @@ function formatFuelGph(value) {
   return `${formatSignificant(value)} gph`;
 }
 
-function formatKg(value) {
+function formatCo2eKg(value) {
   if (!Number.isFinite(value)) return "None";
-  return `${formatDecimal(value, 1)}kg`;
+  return `${formatDecimal(value, 1)} kg CO2e`;
+}
+
+function formatFuelKg(value) {
+  if (!Number.isFinite(value)) return "None";
+  return `${formatDecimal(value, 1)} kg fuel`;
 }
 
 function formatHours(value) {
@@ -1126,13 +1154,16 @@ function shouldShowWellToTank(methodology = currentResultEmissionsMethodology())
   return state.includeWellToTank !== false && hasSplitEmissionsComponents(methodology);
 }
 
-function emissionsComponentBreakdownText(emissions, { includeWellToTank = shouldShowWellToTank() } = {}) {
+function emissionsComponentBreakdownText(
+  emissions,
+  { includeWellToTank = shouldShowWellToTank(), formatter = formatEmissionsSummary } = {}
+) {
   const parts = [];
   if (Number.isFinite(emissions?.tankToWakeCo2eKg)) {
-    parts.push(`TTW ${formatCo2e(emissions.tankToWakeCo2eKg)}`);
+    parts.push(`TTW ${formatter(emissions.tankToWakeCo2eKg)}`);
   }
   if (includeWellToTank && Number.isFinite(emissions?.wellToTankCo2eKg)) {
-    parts.push(`WTT ${formatCo2e(emissions.wellToTankCo2eKg)}`);
+    parts.push(`WTT ${formatter(emissions.wellToTankCo2eKg)}`);
   }
   return parts.join(" · ");
 }
@@ -1145,7 +1176,7 @@ function emissionsSelectedScopeText(emissions) {
 
 function emissionsTotalText(emissions) {
   if (!hasEmissionsTotal(emissions)) return "None";
-  return formatCo2e(emissions.totalCo2eKg);
+  return formatEmissionsSummary(emissions.totalCo2eKg);
 }
 
 function emissionsTotalTooltip(emissions) {
@@ -1159,21 +1190,27 @@ function emissionsTotalTooltip(emissions) {
 
 function emissionsStatusText(emissions) {
   if (!hasEmissionsTotal(emissions)) return "";
-  return formatCo2e(emissions.totalCo2eKg);
+  return formatEmissionsSummary(emissions.totalCo2eKg);
 }
 
-function emissionsColumnLabel(methodology = currentResultEmissionsMethodology()) {
-  if (isEurocontrolTtwOnlyMethodology(methodology)) return "CO2e TTW";
-  if (hasSplitEmissionsComponents(methodology)) {
-    return state.includeWellToTank === false ? "CO2e TTW" : "CO2e TTW+WTT";
+function emissionsColumnLabel(unit = "", methodology = currentResultEmissionsMethodology()) {
+  let label;
+  if (isEurocontrolTtwOnlyMethodology(methodology)) {
+    label = "CO2e TTW";
+  } else if (hasSplitEmissionsComponents(methodology)) {
+    label = state.includeWellToTank === false ? "CO2e TTW" : "CO2e TTW+WTT";
+  } else {
+    label = "CO2e";
   }
-  return "CO2e";
+  return unit ? `${label} (${unit})` : label;
 }
 
 function emissionsRowSubtitle(emissions) {
   if (!emissions) return "";
   if (hasSplitEmissionsComponents(state.emissions?.methodology)) {
-    const breakdown = shouldShowWellToTank(state.emissions?.methodology) ? emissionsComponentBreakdownText(emissions) : "";
+    const breakdown = shouldShowWellToTank(state.emissions?.methodology)
+      ? emissionsComponentBreakdownText(emissions, { formatter: formatEmissionsTons })
+      : "";
     if (isCombinedMethodology(state.emissions?.methodology)) {
       return [emissions.aircraftIcaoCode || emissions.profile || "", breakdown].filter(Boolean).join(" · ");
     }
@@ -1370,7 +1407,7 @@ function resultColumns(hasTypeColumn) {
       title: "Arrival airport and landing time for the flight event.",
     },
     {
-      label: emissionsColumnLabel(),
+      label: emissionsColumnLabel("t"),
       sortKey: "emissions",
       className: "emissions-column",
       title: "Estimated CO2e for this flight using the selected emissions model and WTT setting.",
@@ -1394,7 +1431,7 @@ function modelColumns() {
         title: "Number of flights in this model group.",
       },
       {
-        label: emissionsColumnLabel(),
+        label: emissionsColumnLabel("t"),
         sortKey: "emissions",
         className: "numeric-column emissions-column",
         title: "Total estimated CO2e for all flights in this model group.",
@@ -1416,7 +1453,7 @@ function modelColumns() {
         title: "Number of flights in this model group.",
       },
       {
-        label: emissionsColumnLabel(),
+        label: emissionsColumnLabel("t"),
         sortKey: "emissions",
         className: "numeric-column emissions-column",
         title: "Total estimated CO2e for all flights in this model group.",
@@ -1455,7 +1492,7 @@ function modelColumns() {
       title: "Average gallons per hour used for this model group's estimates.",
     },
     {
-      label: emissionsColumnLabel(),
+      label: emissionsColumnLabel("t"),
       sortKey: "emissions",
       className: "numeric-column emissions-column",
       title: "Total estimated CO2e for all flights in this model group.",
@@ -1489,13 +1526,13 @@ function typicalColumns() {
       title: "Flights without an emissions estimate under the selected emissions model.",
     },
     {
-      label: emissionsColumnLabel(),
+      label: emissionsColumnLabel("kt"),
       sortKey: "emissions",
       className: "numeric-column emissions-column",
       title: "Total estimated CO2e for the comparison period using the selected emissions model and WTT setting.",
     },
     {
-      label: `${emissionsColumnLabel()} Diff`,
+      label: `${emissionsColumnLabel("kt")} Diff`,
       sortKey: "emissions_diff",
       className: "numeric-column emissions-column",
       title: "Difference between the current search total CO2e and this comparison period total.",
@@ -1549,11 +1586,11 @@ function typicalEmissionsDiffKg(row) {
   return currentTotal - comparisonTotal;
 }
 
-function formatCo2eDiff(kg) {
+function formatEmissionsKilotonnesDiff(kg) {
   if (!Number.isFinite(kg)) return "";
-  if (kg === 0) return formatCo2e(0);
+  if (kg === 0) return formatEmissionsKilotonnes(0);
   const sign = kg < 0 ? "-" : "";
-  return `${sign}${formatCo2e(Math.abs(kg))}`;
+  return `${sign}${formatEmissionsKilotonnes(Math.abs(kg))}`;
 }
 
 function headerSortDirection(sortKey) {
@@ -1805,10 +1842,10 @@ function typicalCsvRows(rows) {
       "End",
       "Events",
       "Unknown flights",
-      "Total CO2e (t)",
-      `${emissionsColumnLabel()} Diff (t)`,
-      "TTW CO2e (t)",
-      ...(includeWtt ? ["WTT CO2e (t)"] : []),
+      "Total CO2e (kt)",
+      "Total CO2e difference (kt)",
+      "TTW CO2e (kt)",
+      ...(includeWtt ? ["WTT CO2e (kt)"] : []),
     ],
     ...rows.map((row) => [
       typicalComparisonText(row) || row.label,
@@ -1816,10 +1853,10 @@ function typicalCsvRows(rows) {
       row.endInput,
       formatNumber(row.count),
       formatNumber(row.emissions?.missingEventCount || 0),
-      formatTonsCell(row.emissions?.totalCo2eKg),
-      formatTonsCell(typicalEmissionsDiffKg(row)),
-      formatTonsCell(row.emissions?.tankToWakeCo2eKg),
-      ...(includeWtt ? [formatTonsCell(row.emissions?.wellToTankCo2eKg)] : []),
+      formatKilotonnesCell(row.emissions?.totalCo2eKg),
+      formatKilotonnesCell(typicalEmissionsDiffKg(row)),
+      formatKilotonnesCell(row.emissions?.tankToWakeCo2eKg),
+      ...(includeWtt ? [formatKilotonnesCell(row.emissions?.wellToTankCo2eKg)] : []),
     ]),
   ];
 }
@@ -2397,16 +2434,16 @@ function renderFlightDetail(event) {
       ["LTO fuel", escapeHtml(formatFuelGallons(emissions.ltoGallons))],
       ["Cruise fuel", escapeHtml(formatFuelGallons(emissions.cruiseFuelGallons))],
       ["Total fuel", escapeHtml(formatFuelGallons(emissions.totalFuelGallons))],
-      ["Fuel mass", escapeHtml(formatKg(emissions.totalFuelKg))],
-      ["Tank-to-wake CO2e", escapeHtml(formatKg(emissions.tankToWakeCo2eKg))],
-      ...(includeWtt ? [["Well-to-tank CO2e", escapeHtml(formatKg(emissions.wellToTankCo2eKg))]] : []),
+      ["Fuel mass", escapeHtml(formatFuelKg(emissions.totalFuelKg))],
+      ["Tank-to-wake CO2e", escapeHtml(formatCo2eKg(emissions.tankToWakeCo2eKg))],
+      ...(includeWtt ? [["Well-to-tank CO2e", escapeHtml(formatCo2eKg(emissions.wellToTankCo2eKg))]] : []),
     ];
-    calculationRows.push(["Total CO2e", escapeHtml(formatCo2e(emissions.totalCo2eKg))]);
+    calculationRows.push(["Total CO2e", escapeHtml(formatCo2eKg(emissions.totalCo2eKg))]);
     const factorRows = [
       ["Lateral inefficiency", escapeHtml(formatDecimal(emissions.lateralInefficiencyFactor, 3))],
-      ["Jet A mass", escapeHtml(`${formatDecimal(emissions.jetAKgPerGallon, 2)}kg/gal`)],
-      ["Tank-to-wake factor", escapeHtml(`${formatDecimal(emissions.tankToWakeFactor, 4)}kg CO2e/kg fuel`)],
-      ...(includeWtt ? [["Well-to-tank factor", escapeHtml(`${formatDecimal(emissions.wellToTankFactor, 4)}kg CO2e/kg fuel`)]] : []),
+      ["Jet A mass", escapeHtml(`${formatDecimal(emissions.jetAKgPerGallon, 2)} kg fuel/gal`)],
+      ["Tank-to-wake factor", escapeHtml(`${formatDecimal(emissions.tankToWakeFactor, 4)} kg CO2e/kg fuel`)],
+      ...(includeWtt ? [["Well-to-tank factor", escapeHtml(`${formatDecimal(emissions.wellToTankFactor, 4)} kg CO2e/kg fuel`)]] : []),
     ];
     sections.push(`<section class="detail-section"><h3>Profile</h3>${detailList(profileRows)}</section>`);
     sections.push(`<section class="detail-section"><h3>Calculation</h3>${detailList(calculationRows)}</section>`);
@@ -2430,15 +2467,15 @@ function renderFlightDetail(event) {
       ["Distance correction", escapeHtml(formatDistanceKm(emissions.gcdCorrectionKm))],
       ["Curve segment", escapeHtml(emissions.curveSegment || "Unknown")],
       ["Segment start", escapeHtml(formatDistanceNm(emissions.segmentStartNm))],
-      ["Segment end", escapeHtml(formatDistanceNm(emissions.segmentEndNm))],
-      ["Segment start fuel", escapeHtml(formatKg(emissions.segmentStartFuelKg))],
-      ["Segment end fuel", escapeHtml(formatKg(emissions.segmentEndFuelKg))],
-      ["Segment slope", escapeHtml(Number.isFinite(emissions.segmentSlopeKgPerNm) ? `${formatDecimal(emissions.segmentSlopeKgPerNm, 4)}kg/nm` : "None")],
-      ["Fuel", escapeHtml(formatKg(emissions.fuelKg || emissions.totalFuelKg))],
-      ["CO2 coefficient", escapeHtml(Number.isFinite(emissions.co2Coefficient) ? `${formatDecimal(emissions.co2Coefficient, 3)}kg/kg fuel` : "None")],
-      ["Tank-to-wake CO2e", escapeHtml(formatKg(emissions.tankToWakeCo2eKg))],
-      ...(includeWtt ? [["Well-to-tank CO2e", escapeHtml(formatKg(emissions.wellToTankCo2eKg))]] : []),
-      ["Total emissions", escapeHtml(formatCo2e(emissions.totalCo2eKg))],
+      ["Segment end", escapeHtml(formatCurveSegmentEndNm(emissions.segmentEndNm))],
+      ["Segment start fuel", escapeHtml(formatFuelKg(emissions.segmentStartFuelKg))],
+      ["Segment end fuel", escapeHtml(formatFuelKg(emissions.segmentEndFuelKg))],
+      ["Segment slope", escapeHtml(Number.isFinite(emissions.segmentSlopeKgPerNm) ? `${formatDecimal(emissions.segmentSlopeKgPerNm, 4)} kg fuel/nm` : "None")],
+      ["Fuel", escapeHtml(formatFuelKg(emissions.fuelKg || emissions.totalFuelKg))],
+      ["CO2 coefficient", escapeHtml(Number.isFinite(emissions.co2Coefficient) ? `${formatDecimal(emissions.co2Coefficient, 3)} kg CO2/kg fuel` : "None")],
+      ["Tank-to-wake CO2e", escapeHtml(formatCo2eKg(emissions.tankToWakeCo2eKg))],
+      ...(includeWtt ? [["Well-to-tank CO2e", escapeHtml(formatCo2eKg(emissions.wellToTankCo2eKg))]] : []),
+      ["Total emissions", escapeHtml(formatCo2eKg(emissions.totalCo2eKg))],
     ];
     const profileRows = [
       ["Profile", escapeHtml(emissions.profile || "None")],
@@ -2463,7 +2500,7 @@ function renderFlightDetail(event) {
       ["Gas basis", escapeHtml(emissions.gasBasis || "CO2 from fuel burn")],
       ["Aircraft ICAO type", escapeHtml(emissions.aircraftIcaoCode || "Unknown")],
       ["Aircraft IATA type", escapeHtml(emissions.aircraftIataCode || "Unknown")],
-      ["Total emissions (TTW)", escapeHtml(formatCo2e(emissions.totalCo2eKg))],
+      ["Total emissions (TTW)", escapeHtml(formatCo2eKg(emissions.totalCo2eKg))],
     ];
     sections.push(`<section class="detail-section"><h3>Emissions</h3>${detailList(ghgcRows)}</section>`);
   } else {
@@ -2962,7 +2999,7 @@ function renderFlightRows(events, columns, hasTypeColumn) {
           <td><strong>${escapeHtml(event.landingAirportCode || "")}</strong><span>${escapeHtml(
             formatDateTime(event.landingTime)
           )}</span></td>
-          <td><strong>${escapeHtml(formatCo2e(event.emissions?.totalCo2eKg))}</strong><span>${escapeHtml(
+          <td><strong>${escapeHtml(formatEmissionsTons(event.emissions?.totalCo2eKg))}</strong><span>${escapeHtml(
             emissionsRowSubtitle(event.emissions)
           )}</span></td>
         </tr>
@@ -2979,7 +3016,12 @@ function renderModelRows(groups, columns) {
         const emissionsDetail =
           isEurocontrolTtwOnlyMethodology() || !shouldShowWellToTank()
             ? ""
-            : [emissionsSelectedScopeText(group), emissionsComponentBreakdownText(group)].filter(Boolean).join(" · ");
+            : [
+                emissionsSelectedScopeText(group),
+                emissionsComponentBreakdownText(group, { formatter: formatEmissionsTons }),
+              ]
+                .filter(Boolean)
+                .join(" · ");
         const values = {
           model: `<strong>${escapeHtml(group.modelName)}</strong>`,
           gph_source: gphSourceIcon(group),
@@ -2987,7 +3029,7 @@ function renderModelRows(groups, columns) {
           estimated: `<strong>${escapeHtml(formatNumber(group.estimatedEventCount))}</strong>`,
           hours: `<strong>${escapeHtml(formatHours(group.totalHours))}</strong>`,
           gph: `<strong>${escapeHtml(formatFuelGph(group.gph))}</strong>`,
-          emissions: `<strong>${escapeHtml(formatCo2e(group.totalCo2eKg))}</strong>${
+          emissions: `<strong>${escapeHtml(formatEmissionsTons(group.totalCo2eKg))}</strong>${
             emissionsDetail ? `<span>${escapeHtml(emissionsDetail)}</span>` : ""
           }`,
         };
@@ -3023,8 +3065,8 @@ function renderTypicalRows(rows, columns) {
         )}</strong><span>${escapeHtml(row.endInput)}</span></button>`,
         count: `<strong>${escapeHtml(formatNumber(row.count))}</strong>`,
         unknown: `<strong>${escapeHtml(formatNumber(row.emissions?.missingEventCount || 0))}</strong>`,
-        emissions: `<strong>${escapeHtml(formatCo2e(row.emissions?.totalCo2eKg))}</strong>`,
-        emissions_diff: `<strong>${escapeHtml(formatCo2eDiff(typicalEmissionsDiffKg(row)))}</strong>`,
+        emissions: `<strong>${escapeHtml(formatEmissionsKilotonnes(row.emissions?.totalCo2eKg))}</strong>`,
+        emissions_diff: `<strong>${escapeHtml(formatEmissionsKilotonnesDiff(typicalEmissionsDiffKg(row)))}</strong>`,
       };
       return `
         <tr class="typical-row">
