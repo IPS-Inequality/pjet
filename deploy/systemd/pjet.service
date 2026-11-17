@@ -1,21 +1,24 @@
 [Unit]
 Description=Private Jet Emissions Tracker API
-After=network-online.target
+# PJET reads the flight ledger kept current by adsbfi-proxy's worker.
+After=network-online.target adsbfi-proxy-worker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
+# Run as the adsbfi-proxy user so PJET can read its databases.
 User=adsb
 Group=adsb
 WorkingDirectory=/opt/pjet
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=8080
+# PJET's own state (auth.sqlite).
 Environment=PJET_DB_DIR=/var/lib/pjet
-Environment=PJET_UPDATE_STATUS=/var/lib/pjet/update-status.json
-Environment=PJET_UPDATE_LOCK=/var/lib/pjet/update.lock
+# adsbfi-proxy's ADSBFI_DB_DIR (events.sqlite, airports.sqlite, aircraft.sqlite).
+Environment=PJET_ADSBFI_DB_DIR=/var/lib/adsbfi-proxy
 EnvironmentFile=/etc/pjet/secrets.env
-ExecStart=/usr/bin/npm run serve -- --host 127.0.0.1 --port 8080 --db-dir /var/lib/pjet
+ExecStart=/usr/bin/node /opt/pjet/server/index.js
 Restart=on-failure
 RestartSec=5
 

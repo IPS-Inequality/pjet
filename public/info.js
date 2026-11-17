@@ -176,15 +176,16 @@ function renderSection(title, value) {
 function overview(info) {
   return {
     service: info.service?.name,
-    events: info.database?.events,
+    dataSource: info.service?.dataSource,
+    movements: info.database?.movements,
     minTime: info.database?.minTime,
     maxTime: info.database?.maxTime,
-    secondsSinceMaxEvent: info.database?.secondsSinceMaxEvent,
+    secondsSinceLatestMovement: info.database?.secondsSinceLatestMovement,
+    processedThrough: info.ingest?.processedThrough,
+    secondsSinceLastPoll: info.ingest?.secondsSinceLastPoll,
     databaseSizeBytes: info.database?.size?.totalBytes,
     processedFiles: info.database?.processedFiles?.count,
-    nextUpdateAt: info.service?.nextUpdateAt,
-    secondsUntilNextUpdate: info.service?.secondsUntilNextUpdate,
-    isRebuilding: info.service?.isRebuilding,
+    isIngesting: info.service?.isIngesting,
   };
 }
 
@@ -198,7 +199,7 @@ function renderInfo(info) {
     renderSection("Overview", overview(info)),
     renderSection("Service", info.service || {}),
     renderSection("Database", info.database || {}),
-    renderSection("Updater", info.updater || {}),
+    renderSection("Ingest", info.ingest || {}),
   ];
   const raw = createElement("section", { className: "info-section" }, [
     createElement("h2", { text: "Raw JSON" }),
@@ -206,8 +207,13 @@ function renderInfo(info) {
   ]);
   content.replaceChildren(...sections, raw);
   updatedText.textContent = `Last refreshed ${new Date().toLocaleString()}`;
-  if (info.service?.isRebuilding) setStatus("Updater is currently running", "is-active");
-  else setStatus("Updater is idle", "is-ok");
+  const ingestError = info.ingest?.buildError || info.ingest?.downloadError;
+  const pollAge = info.ingest?.secondsSinceLastPoll;
+  if (!info.ingest) setStatus("No adsbfi-proxy worker status found", "is-error");
+  else if (ingestError) setStatus(`adsbfi-proxy worker error: ${ingestError}`, "is-error");
+  else if (!Number.isFinite(pollAge) || pollAge > 15 * 60) setStatus("adsbfi-proxy worker has not polled recently", "is-error");
+  else if (info.service?.isIngesting) setStatus("adsbfi-proxy worker is building new movements", "is-active");
+  else setStatus("adsbfi-proxy worker is current", "is-ok");
 }
 
 function showLogin(message = "") {

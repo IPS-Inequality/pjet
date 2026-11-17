@@ -1,11 +1,11 @@
 {
   "name": "pjet",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
     "serve": "node server/index.js",
-    "check": "node --check server/index.js && node --check server/auth-store.js && node --check public/app.js && node --check public/admin.js",
+    "check": "node --check server/index.js && node --check server/flight-sql.js && node --check server/auth-store.js && node --check public/app.js && node --check public/admin.js && node --check public/info.js",
     "test": "node --test server/*.test.js"
   },
   "dependencies": {

@@ -24,58 +24,30 @@ Every model works from a flight event row with these fields:
 ### Where the metadata comes from
 
 The event rows are assembled at query time by joining three SQLite databases
-(`server/index.js` `LEFT JOIN`s them on `icao_id` and airport ids):
+that [adsbfi-proxy](https://github.com/kylemcdonald/adsbfi-proxy) builds and keeps
+current (`server/flight-sql.js` `LEFT JOIN`s them on `icao_id` and airport ids):
 
-- **`events.sqlite`** — takeoff/landing pairs derived from the ADS-B Exchange globe
-  heatmap history. `scripts/update-events.mjs` downloads 30-minute heatmap slots from
-  `https://globe.adsbexchange.com/globe_history/<year>/<month>/<day>/heatmap/<slot>.bin.ttf`,
-  and the event builder (`src/pjet/builder.py`) turns position traces
-  into completed events. Each event carries the aircraft's 24-bit ICAO (Mode S)
-  transponder address — the hex code broadcast over ADS-B, parsed as an integer
-  `icao_id` — plus timestamps and matched takeoff/landing airport ids. No aircraft
-  identity beyond the ICAO address is stored on the event itself.
+- **`events.sqlite`** — individual takeoff and landing movements inferred from the
+  public [adsb.fi](https://adsb.fi) heatmap archive. Each movement carries the
+  aircraft's 24-bit ICAO (Mode S) transponder address — the hex code broadcast over
+  ADS-B, parsed as an integer `icao_id` — plus a timestamp and the matched airport
+  id. PJET pairs a takeoff with the directly following landing of the same aircraft
+  (within 20 hours) to form a flight; see the README. No aircraft identity beyond
+  the ICAO address is stored on a movement.
 - **`airports.sqlite`** — airport codes, names, and coordinates imported from the
-  [OurAirports](https://ourairports.com/data/) open dataset
-  (`src/pjet/airports.py`). This is where the `*_lat_e7`/`*_lon_e7`
-  values above come from.
+  [OurAirports](https://ourairports.com/data/) open dataset. This is where the
+  `*_lat_e7`/`*_lon_e7` values above come from.
 - **`aircraft.sqlite`** — the source of `manufacturer`, `model`, `icao_type` (the
-  registry-reported ICAO Doc 8643 type designator, e.g. `GLF6`), and `aircraft_type`.
-  Built by `pjet import-aircraft` (`src/pjet/aircraft.py`),
-  which merges four registries keyed by the same ICAO address:
-
-  1. **FAA aircraft registration database** (`ReleasableAircraft.zip`): `MASTER.txt`
-     rows keyed by `MODE S CODE HEX`, joined to `ACFTREF.txt` via `MFR MDL CODE` to
-     get `MFR` (manufacturer) and `MODEL`, plus the type-aircraft code, type-engine
-     code, seat count, and weight class used by the classifier below.
-  2. **ADS-B Exchange basic aircraft database** (`basic-ac-db.json.gz`, JSON lines):
-     registration, manufacturer, model, ICAO type designator, short type, and a
-     military flag.
-  3. **tar1090 aircraft database** (semicolon-delimited CSV): registration, ICAO type
-     designator, and model description.
-  4. **OpenSky aircraft metadata** (CSV): registration, type code, and model.
-
-  Sources load in that order and merge per ICAO address: for most fields the first
-  non-empty value wins, but the text fields (`manufacturer`, `model`, type strings)
-  use a "prefer longer" rule — a later source replaces the current value only when
-  the current normalized text is a substring of the incoming text (i.e. the incoming
-  string strictly extends it, e.g. `"CITATION"` → `"CITATION LATITUDE"`). Because the
-  FAA registry loads first, US-registered aircraft usually carry FAA-style strings
-  such as `TEXTRON AVIATION INC` / `700`, which is why the profile aliases and regex
-  patterns in the models must match registry codes (`525C`, `680A`) as well as
-  marketing names (`Citation CJ4`).
-
-  **`aircraft_type` is not present in any upstream registry** — it is computed during
-  the import by `classify_aircraft()`, an ordered decision list over the merged
-  fields: the military flag/patterns first; then FAA type-aircraft codes (helicopter,
-  gyroplane, glider, lighter-than-air); uncrewed/experimental patterns → `unknown`;
-  piston model patterns; turboprop-airliner patterns → `commercial_turboprop`; FAA
-  engine code 2 or a `T` in the short type → `turboprop`; BBJ/ACJ derivatives →
-  `business_jet`; airliner patterns → `commercial_jet`; business-jet patterns →
-  `business_jet`; remaining jets (engine code 4/5 or `J` in short type) split by seat
-  count ≥ 35 or FAA weight class ≥ 3 → `commercial_jet`, else `business_jet` when
-  seats/weight are known, else `unknown_jet`; then piston/electric engine codes and a
-  generic `fixed_wing`/`unknown` tail. The resulting label is stored in an
-  `aircraft_types` lookup table that the server joins back in as `aircraft_type`.
+  registry-reported ICAO Doc 8643 type designator, e.g. `GLF6`), and
+  `aircraft_type`. adsbfi-proxy's `import-aircraft` merges the FAA aircraft
+  registry with several public aircraft databases keyed by the same ICAO address,
+  and computes `aircraft_type` (`business_jet`, `commercial_jet`, `turboprop`,
+  `piston`, `helicopter`, and so on) from the merged registry fields, ICAO type
+  designators and airframe descriptors. Its README lists the sources and the
+  classification. Because the FAA registry takes precedence, US-registered
+  aircraft usually carry FAA-style strings such as `TEXTRON AVIATION INC` / `700`,
+  which is why the profile aliases and regex patterns in the models must match
+  registry codes (`525C`, `680A`) as well as marketing names (`Citation CJ4`).
 
 If an event's ICAO address has no row in `aircraft.sqlite`, the join leaves
 `manufacturer`/`model` null and `aircraft_type` reported as `unknown`, and none of the
@@ -207,8 +179,7 @@ set to the same tank-to-wake value).
 ### Step 1 — Resolve the ICAO aircraft type code
 
 Resolution is **registry-designator-first**. The aircraft registries merged into
-`aircraft.sqlite` (ADS-B Exchange, tar1090, OpenSky) report each airframe's ICAO
-Doc 8643 type designator; the import stores it as `icao_type` (normalized to 2–4
+`aircraft.sqlite` report each airframe's ICAO Doc 8643 type designator; the import stores it as `icao_type` (normalized to 2–4
 uppercase alphanumerics; `ZZZZ`, "type not assigned", becomes null). When a flight's
 aircraft has an `icao_type`, that designator is the type code, after two small
 correction layers:

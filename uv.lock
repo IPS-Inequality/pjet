@@ -11,25 +11,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "pjet"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pint" },
-    { name = "pint-pandas" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", specifier = ">=3.0.3" },
-    { name = "pint", specifier = ">=0.25.3" },
-    { name = "pint-pandas", specifier = ">=0.8.0" },
-]
-
-[[package]]
 name = "flexcache"
 version = "0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -192,6 +173,25 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/07/71/e5cdbaab7381b5a92c6d612cbe2ac8ca757b4ac4799cc7a3de3d8b360b2a/pint_pandas-0.8.0.tar.gz", hash = "sha256:6b8b607c0cfeb615afed68e087cfde56b1bd8399a4b088d15d2a0d7692ea9bfc", size = 111943, upload-time = "2026-03-20T00:18:56.674Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/ac/c71db56079a5966ea365d29be0dafee6fd5ab9b8c7914b6507bc1a179134/pint_pandas-0.8.0-py3-none-any.whl", hash = "sha256:40ee8a85f0923695fa7dcc6927caa3043627e1561c056e9f4499fb2e7478f779", size = 31009, upload-time = "2026-03-20T00:18:55.133Z" },
+]
+
+[[package]]
+name = "pjet"
+version = "0.5.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pint" },
+    { name = "pint-pandas" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pandas", specifier = ">=3.0.3" },
+    { name = "pint", specifier = ">=0.25.3" },
+    { name = "pint-pandas", specifier = ">=0.8.0" },
 ]
 
 [[package]]

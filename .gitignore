@@ -6,7 +6,6 @@ __pycache__/
 *.py[cod]
 node_modules/
 dist/
-.wrangler/
 *.log
 data/
 exports/
@@ -20,5 +19,3 @@ exports/
 *.p12
 *.pfx
 
-# Rust build output
-rust/pjet/target/

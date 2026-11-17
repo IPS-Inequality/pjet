@@ -1,7 +1,7 @@
 [project]
 name = "pjet"
-version = "0.1.0"
-description = "Private Jet Emissions Tracker data builder"
+version = "0.5.0"
+description = "Python dependencies for PJET's vendored flight-emissions bridge"
 requires-python = ">=3.12"
 dependencies = [
   "numpy>=1.26",
@@ -10,12 +10,8 @@ dependencies = [
   "pint-pandas>=0.8.0",
 ]
 
-[project.scripts]
-pjet = "pjet.cli:main"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv]
+package = false
 
 [tool.ruff]
 line-length = 120

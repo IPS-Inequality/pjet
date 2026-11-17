@@ -6,6 +6,13 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ADMIN_ROLE, VOUCHER_ROLE, openAuthStore } from "./auth-store.js";
+import {
+  AIRPORT_COUNTS_SQL,
+  EVENT_COUNT_SQL,
+  EVENT_DETAIL_SQL,
+  EVENT_ROWS_SQL,
+  MAX_FLIGHT_SECONDS,
+} from "./flight-sql.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +21,9 @@ const DOCS_DIR = path.join(ROOT_DIR, "docs");
 const APP_VERSION = readPackageVersion();
 const DEFAULT_DATA_DIR = process.env.PJET_DATA_DIR || path.join(ROOT_DIR, "data");
 const DEFAULT_DB_DIR = path.join(DEFAULT_DATA_DIR, "pjet");
+// The flight ledger is produced and kept current by a separate adsbfi-proxy
+// installation; PJET only reads it.
+const DEFAULT_ADSBFI_DB_DIR = path.resolve(ROOT_DIR, "..", "adsbfi-proxy", "data", "db");
 const COOKIE_NAME = "pjet_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -22,8 +32,7 @@ const LOGIN_ATTEMPTS = new Map();
 const DEFAULT_SQLITE_CACHE_KIB = 262_144;
 const DEFAULT_SQLITE_MMAP_BYTES = 2_147_418_112;
 const DEFAULT_EMISSIONS_CACHE_MAX = 100_000;
-const UPDATE_INTERVAL_MINUTES = 30;
-const UPDATE_TIMER_MINUTES = [5, 35];
+const INGEST_SLOT_MINUTES = 30;
 const EUROCONTROL_FAST_METHODOLOGY = "eurocontrol_fast";
 const COMBINED_METHODOLOGY = "combined";
 const EUROCONTROL_FAST_LABEL = "EUROCONTROL Fast Model";
@@ -2342,16 +2351,14 @@ function parseArgs(argv) {
     host: process.env.HOST || "127.0.0.1",
     port: Number(process.env.PORT || 8080),
     dbDir: environment("PJET_DB_DIR", DEFAULT_DB_DIR),
-    updateStatusPath: environment("PJET_UPDATE_STATUS") || null,
-    updateLockPath: environment("PJET_UPDATE_LOCK") || null,
+    adsbfiDbDir: environment("PJET_ADSBFI_DB_DIR", environment("ADSBFI_DB_DIR", DEFAULT_ADSBFI_DB_DIR)),
   };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === "--host") args.host = argv[++index];
     else if (value === "--port") args.port = Number(argv[++index]);
     else if (value === "--db-dir") args.dbDir = argv[++index];
-    else if (value === "--update-status") args.updateStatusPath = argv[++index];
-    else if (value === "--update-lock") args.updateLockPath = argv[++index];
+    else if (value === "--adsbfi-db-dir") args.adsbfiDbDir = argv[++index];
   }
   return args;
 }
@@ -2360,10 +2367,15 @@ function escapeSqlString(value) {
   return String(value).replaceAll("'", "''");
 }
 
-function openDatabase(dbDir) {
-  const eventsPath = path.join(dbDir, "events.sqlite");
-  const airportsPath = path.join(dbDir, "airports.sqlite");
-  const aircraftPath = path.join(dbDir, "aircraft.sqlite");
+function openDatabase(adsbfiDbDir) {
+  const eventsPath = path.join(adsbfiDbDir, "events.sqlite");
+  const airportsPath = path.join(adsbfiDbDir, "airports.sqlite");
+  const aircraftPath = path.join(adsbfiDbDir, "aircraft.sqlite");
+  for (const required of [eventsPath, airportsPath, aircraftPath]) {
+    if (!fs.existsSync(required)) {
+      throw new Error(`Missing ${required}; set PJET_ADSBFI_DB_DIR to an adsbfi-proxy database directory`);
+    }
+  }
   const cacheKiB = Number(environment("PJET_SQLITE_CACHE_KIB", DEFAULT_SQLITE_CACHE_KIB));
   const mmapBytes = Number(environment("PJET_SQLITE_MMAP_BYTES", DEFAULT_SQLITE_MMAP_BYTES));
   const db = new Database(eventsPath, { fileMustExist: true });
@@ -2375,9 +2387,13 @@ function openDatabase(dbDir) {
     PRAGMA mmap_size = ${Number.isFinite(mmapBytes) && mmapBytes > 0 ? Math.round(mmapBytes) : DEFAULT_SQLITE_MMAP_BYTES};
     PRAGMA query_only = ON;
   `);
+  const hasEndpoints = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'endpoints'").get();
+  if (!hasEndpoints) {
+    throw new Error(`${eventsPath} has no endpoints table; it must be an adsbfi-proxy movement ledger`);
+  }
   const aircraftColumns = new Set(db.prepare("SELECT name FROM aircraft.pragma_table_info('aircraft')").all().map((row) => row.name));
   if (!aircraftColumns.has("icao_type")) {
-    throw new Error(`${aircraftPath} is missing the icao_type column; rebuild it with "pjet import-aircraft"`);
+    throw new Error(`${aircraftPath} is missing the icao_type column; rebuild it with "adsbfi-proxy import-aircraft"`);
   }
   return db;
 }
@@ -2393,36 +2409,42 @@ function toIso(value) {
   return new Date(Number(value) * 1000).toISOString();
 }
 
-function readEventMeta(db) {
+function readLedgerMeta(db) {
   const values = Object.fromEntries(db.prepare("SELECT key, value FROM meta").all().map((row) => [row.key, row.value]));
-  if (values.event_count && values.min_takeoff_ts && values.max_landing_ts) {
+  const ledger = {
+    inferenceVersion: values.inference_version || null,
+    ledgerSchema: values.ledger_schema || null,
+  };
+  if (values.endpoint_count && values.min_endpoint_ts && values.max_endpoint_ts) {
     return {
-      count: Number(values.event_count),
-      min_ts: Number(values.min_takeoff_ts),
-      max_ts: Number(values.max_landing_ts),
+      ...ledger,
+      count: Number(values.endpoint_count),
+      min_ts: Number(values.min_endpoint_ts),
+      max_ts: Number(values.max_endpoint_ts),
       source: "meta",
     };
   }
   return {
-    ...db.prepare("SELECT COUNT(*) AS count, MIN(takeoff_ts) AS min_ts, MAX(landing_ts) AS max_ts FROM events").get(),
-    source: "events_scan",
+    ...ledger,
+    ...db.prepare("SELECT COUNT(*) AS count, MIN(ts) AS min_ts, MAX(ts) AS max_ts FROM endpoints").get(),
+    source: "endpoints_scan",
   };
 }
 
 function readEventRange(db) {
   const started = performance.now();
-  const eventRow = readEventMeta(db);
+  const ledgerRow = readLedgerMeta(db);
   return {
-    events: Number(eventRow.count || 0),
-    minTime: toIso(eventRow.min_ts),
-    maxTime: toIso(eventRow.max_ts),
-    source: eventRow.source,
+    movements: Number(ledgerRow.count || 0),
+    minTime: toIso(ledgerRow.min_ts),
+    maxTime: toIso(ledgerRow.max_ts),
+    source: ledgerRow.source,
     queryMs: roundNumber(performance.now() - started, 3),
   };
 }
 
-function readProcessedMeta(dbDir) {
-  const statePath = path.join(dbDir, "build_state.sqlite");
+function readProcessedMeta(adsbfiDbDir) {
+  const statePath = path.join(adsbfiDbDir, "build_state.sqlite");
   if (!fs.existsSync(statePath)) return null;
   const stateDb = new Database(statePath, { readonly: true, fileMustExist: true });
   try {
@@ -2431,7 +2453,6 @@ function readProcessedMeta(dbDir) {
         `
         SELECT
           COUNT(*) AS processed_count,
-          MAX(path) AS max_path,
           MAX(slot_ts) AS max_slot_ts
         FROM processed_files
         `
@@ -2450,7 +2471,7 @@ function fileSize(pathname) {
   }
 }
 
-function databaseFileStats(dbDir) {
+function databaseFileStats(adsbfiDbDir) {
   const names = [
     "events.sqlite",
     "events.sqlite-wal",
@@ -2466,7 +2487,7 @@ function databaseFileStats(dbDir) {
     "build_state.sqlite-shm",
   ];
   const files = names.map((name) => {
-    const bytes = fileSize(path.join(dbDir, name));
+    const bytes = fileSize(path.join(adsbfiDbDir, name));
     return { name, bytes };
   });
   const totalBytes = files.reduce((total, file) => total + (file.bytes || 0), 0);
@@ -2481,83 +2502,55 @@ function readJsonFile(pathname) {
   }
 }
 
-function processExists(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function readLock(pathname) {
-  try {
-    const payload = JSON.parse(fs.readFileSync(pathname, "utf8"));
-    return {
-      ...payload,
-      active: processExists(Number(payload.pid)),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function nextUpdateAt(now = new Date()) {
-  const next = new Date(now);
-  next.setSeconds(0, 0);
-  const currentMinute = next.getMinutes();
-  const minute = UPDATE_TIMER_MINUTES.find((candidate) => candidate > currentMinute);
-  if (minute === undefined) {
-    next.setHours(next.getHours() + 1, UPDATE_TIMER_MINUTES[0], 0, 0);
-  } else {
-    next.setMinutes(minute, 0, 0);
-  }
-  return next;
+function secondsSince(isoTime, now) {
+  const timeMs = Date.parse(isoTime || "");
+  return Number.isFinite(timeMs) ? Math.max(0, Math.round((now.getTime() - timeMs) / 1000)) : null;
 }
 
 function buildInfo(db, options) {
-  const eventRow = readEventMeta(db);
-  const processedRow = readProcessedMeta(options.dbDir);
-  const updateStatusPath = options.updateStatusPath || path.join(options.dbDir, "update-status.json");
-  const updateLockPath = options.updateLockPath || path.join(options.dbDir, "update.lock");
-  const updateStatus = readJsonFile(updateStatusPath);
-  const lock = readLock(updateLockPath);
+  const ledgerRow = readLedgerMeta(db);
+  const processedRow = readProcessedMeta(options.adsbfiDbDir);
+  const workerStatus = readJsonFile(path.join(options.adsbfiDbDir, "proxy-status.json"));
   const now = new Date();
-  const nextUpdate = nextUpdateAt(now);
-  const maxTimeMs = Number(eventRow.max_ts || 0) * 1000;
-  const lastUpdatedAt = Number.isFinite(maxTimeMs) && maxTimeMs > 0 ? new Date(maxTimeMs) : null;
+  const maxTime = toIso(ledgerRow.max_ts);
   return {
     now: now.toISOString(),
     service: {
       name: "Private Jet Emissions Tracker",
       version: APP_VERSION,
-      updateIntervalMinutes: UPDATE_INTERVAL_MINUTES,
-      nextUpdateAt: nextUpdate.toISOString(),
-      secondsUntilNextUpdate: Math.max(0, Math.round((nextUpdate.getTime() - now.getTime()) / 1000)),
-      isRebuilding: Boolean(lock?.active || updateStatus?.running),
+      dataSource: "adsbfi-proxy (adsb.fi heatmaps)",
+      ingestSlotMinutes: INGEST_SLOT_MINUTES,
+      maxFlightHours: MAX_FLIGHT_SECONDS / 3600,
+      isIngesting: Boolean(workerStatus?.build_running),
     },
     database: {
-      dbDir: options.dbDir,
-      events: Number(eventRow.count || 0),
-      minTime: toIso(eventRow.min_ts),
-      maxTime: toIso(eventRow.max_ts),
-      secondsSinceMaxEvent: lastUpdatedAt ? Math.max(0, Math.round((now.getTime() - lastUpdatedAt.getTime()) / 1000)) : null,
+      adsbfiDbDir: options.adsbfiDbDir,
+      inferenceVersion: ledgerRow.inferenceVersion,
+      ledgerSchema: ledgerRow.ledgerSchema,
+      movements: Number(ledgerRow.count || 0),
+      minTime: toIso(ledgerRow.min_ts),
+      maxTime,
+      secondsSinceLatestMovement: secondsSince(maxTime, now),
       processedFiles: processedRow
         ? {
             count: Number(processedRow.processed_count || 0),
-            maxPath: processedRow.max_path,
             maxSlotTime: toIso(processedRow.max_slot_ts),
           }
         : null,
-      size: databaseFileStats(options.dbDir),
+      size: databaseFileStats(options.adsbfiDbDir),
     },
-    updater: {
-      statusPath: updateStatusPath,
-      lockPath: updateLockPath,
-      lock,
-      lastStatus: updateStatus,
-    },
+    ingest: workerStatus
+      ? {
+          processedThrough: workerStatus.processed_through || null,
+          lagSeconds: workerStatus.lag_seconds ?? null,
+          lastPollAt: workerStatus.last_poll_at || null,
+          secondsSinceLastPoll: secondsSince(workerStatus.last_poll_at, now),
+          lastBuildAt: workerStatus.last_build_at || null,
+          downloadError: workerStatus.download_error || null,
+          buildError: workerStatus.build_error || null,
+          workerStatus,
+        }
+      : null,
   };
 }
 
@@ -4156,113 +4149,6 @@ function estimateEmissionsForRows(rows, methodology, options = {}) {
   };
 }
 
-const EVENT_CTE = `
-WITH selected_airports(airport_id) AS (
-  SELECT CAST(value AS INTEGER) FROM json_each(@airportIdsJson)
-),
-matched AS (
-  SELECT
-    e.event_id,
-    e.icao_id,
-    e.takeoff_ts,
-    e.takeoff_airport_id,
-    e.landing_ts,
-    e.landing_airport_id,
-    e.takeoff_airport_id AS matched_airport_id,
-    'takeoff' AS operation
-  FROM events e
-  JOIN selected_airports s ON s.airport_id = e.takeoff_airport_id
-  WHERE e.takeoff_ts >= @startTs AND e.takeoff_ts < @endTs
-  UNION ALL
-  SELECT
-    e.event_id,
-    e.icao_id,
-    e.takeoff_ts,
-    e.takeoff_airport_id,
-    e.landing_ts,
-    e.landing_airport_id,
-    e.landing_airport_id AS matched_airport_id,
-    'landing' AS operation
-  FROM events e
-  JOIN selected_airports s ON s.airport_id = e.landing_airport_id
-  WHERE e.landing_ts >= @startTs AND e.landing_ts < @endTs
-),
-filtered AS (
-  SELECT m.*
-  FROM matched m
-  LEFT JOIN aircraft.aircraft ac ON ac.icao_id = m.icao_id
-  LEFT JOIN aircraft.aircraft_types act ON act.aircraft_type_id = ac.aircraft_type_id
-  WHERE @aircraftType IS NULL OR act.label = @aircraftType
-)
-`;
-
-const UNIQUE_EVENTS_CTE = `
-unique_events AS (
-  SELECT
-    event_id,
-    icao_id,
-    takeoff_ts,
-    takeoff_airport_id,
-    landing_ts,
-    landing_airport_id,
-    GROUP_CONCAT(operation || ':' || matched_airport_id, ',') AS operation_matches
-  FROM filtered
-  GROUP BY event_id, icao_id, takeoff_ts, takeoff_airport_id, landing_ts, landing_airport_id
-)
-`;
-
-const EVENT_ROWS_SQL = `
-${EVENT_CTE},
-${UNIQUE_EVENTS_CTE}
-SELECT
-  ue.*,
-  ac.registration,
-  ac.n_number,
-  ac.manufacturer,
-  ac.model,
-  ac.icao_type,
-  act.label AS aircraft_type,
-  ta.code AS takeoff_airport_code,
-  ta.name AS takeoff_airport_name,
-  ta.lat_e7 AS takeoff_lat_e7,
-  ta.lon_e7 AS takeoff_lon_e7,
-  la.code AS landing_airport_code,
-  la.name AS landing_airport_name,
-  la.lat_e7 AS landing_lat_e7,
-  la.lon_e7 AS landing_lon_e7
-FROM unique_events ue
-LEFT JOIN aircraft.aircraft ac ON ac.icao_id = ue.icao_id
-LEFT JOIN aircraft.aircraft_types act ON act.aircraft_type_id = ac.aircraft_type_id
-LEFT JOIN airports.airports ta ON ta.airport_id = ue.takeoff_airport_id
-LEFT JOIN airports.airports la ON la.airport_id = ue.landing_airport_id
-ORDER BY ue.takeoff_ts ASC, ue.event_id ASC
-`;
-
-const EVENT_COUNT_SQL = `
-${EVENT_CTE},
-${UNIQUE_EVENTS_CTE}
-SELECT COUNT(*) AS count FROM unique_events
-`;
-
-const AIRPORT_COUNTS_SQL = `
-${EVENT_CTE}
-SELECT
-  f.matched_airport_id AS airport_id,
-  COUNT(*) AS operations,
-  SUM(CASE WHEN f.operation = 'takeoff' THEN 1 ELSE 0 END) AS takeoffs,
-  SUM(CASE WHEN f.operation = 'landing' THEN 1 ELSE 0 END) AS landings,
-  a.code,
-  a.name,
-  a.lat_e7,
-  a.lon_e7,
-  t.label AS airport_type
-FROM filtered f
-JOIN airports.airports a ON a.airport_id = f.matched_airport_id
-JOIN airports.airport_types t ON t.airport_type_id = a.airport_type_id
-GROUP BY f.matched_airport_id
-ORDER BY operations DESC, a.code ASC
-`;
-
 const EVENT_STREAM_CHUNK_SIZE = 10_000;
 
 function createApi(db, authStore) {
@@ -4362,7 +4248,7 @@ function createApi(db, authStore) {
         .map((row) => row.label);
       response.json({
         version: APP_VERSION,
-        events: eventRange.events,
+        movements: eventRange.movements,
         minTime: eventRange.minTime,
         maxTime: eventRange.maxTime,
         eventRangeSource: eventRange.source,
@@ -4469,6 +4355,7 @@ function createApi(db, authStore) {
       endTs: query.endTs,
       aircraftType: query.aircraftType,
       airportIdsJson: JSON.stringify(query.airportIds),
+      maxFlightSeconds: MAX_FLIGHT_SECONDS,
     };
   }
 
@@ -4770,46 +4657,7 @@ function createApi(db, authStore) {
     }
     const emissionsMethodology = normalizeEmissionsMethodology(payload.emissionsMethodology);
     const includeWellToTank = normalizeIncludeWellToTank(payload.includeWellToTank);
-    const row = db
-      .prepare(
-        `
-        SELECT
-          e.event_id,
-          e.icao_id,
-          e.takeoff_ts,
-          e.takeoff_airport_id,
-          e.landing_ts,
-          e.landing_airport_id,
-          NULL AS operation_matches,
-          ac.registration,
-          ac.n_number,
-          ac.manufacturer,
-          ac.model,
-          ac.icao_type,
-          ac.owner_name,
-          ac.owner_city,
-          ac.owner_state,
-          ac.owner_country,
-          ac.owner_type,
-          ac.year_mfr,
-          act.label AS aircraft_type,
-          ta.code AS takeoff_airport_code,
-          ta.name AS takeoff_airport_name,
-          ta.lat_e7 AS takeoff_lat_e7,
-          ta.lon_e7 AS takeoff_lon_e7,
-          la.code AS landing_airport_code,
-          la.name AS landing_airport_name,
-          la.lat_e7 AS landing_lat_e7,
-          la.lon_e7 AS landing_lon_e7
-        FROM events e
-        LEFT JOIN aircraft.aircraft ac ON ac.icao_id = e.icao_id
-        LEFT JOIN aircraft.aircraft_types act ON act.aircraft_type_id = ac.aircraft_type_id
-        LEFT JOIN airports.airports ta ON ta.airport_id = e.takeoff_airport_id
-        LEFT JOIN airports.airports la ON la.airport_id = e.landing_airport_id
-        WHERE e.event_id = @eventId
-        `
-      )
-      .get({ eventId });
+    const row = db.prepare(EVENT_DETAIL_SQL).get({ eventId, maxFlightSeconds: MAX_FLIGHT_SECONDS });
     if (!row) return null;
     const emissionsResult = estimateEmissionsForRows([row], emissionsMethodology, { includeWellToTank, detail: true });
     return rowToEventDetail(row, emissionsResult.estimates[0] || null);
@@ -4933,7 +4781,7 @@ function createApi(db, authStore) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const db = openDatabase(args.dbDir);
+const db = openDatabase(args.adsbfiDbDir);
 const authStore = openAuthStore(args.dbDir, {
   bootstrapPassword: environment("PJET_PASSWORD"),
   bootstrapSessionSecret: environment("PJET_SESSION_SECRET"),

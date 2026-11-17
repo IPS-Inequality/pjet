@@ -1,118 +1,66 @@
 # Private Jet Emissions Tracker
 
-PJET is a local API and browser frontend for exploring private-jet takeoff and
-landing pairs derived from ADS-B Exchange heatmap data. It builds compact SQLite
-databases from a local cache, then serves authenticated queries and emissions
-estimates.
+PJET is an authenticated API and browser frontend for exploring private-jet
+flights and estimating their emissions. You choose airports, a time range and an
+aircraft class; PJET lists the matching flights, airport operation counts and
+per-flight emissions estimates.
 
-## Before you start
+PJET does not process ADS-B data itself. It reads the movement ledger built by
+[adsbfi-proxy](https://github.com/kylemcdonald/adsbfi-proxy), which turns the
+public [adsb.fi](https://adsb.fi) heatmap archive into SQLite records of aircraft
+takeoffs and landings. PJET only reads these records. A separate adsbfi-proxy
+worker downloads each new 30-minute heatmap file and keeps the ledger current.
+Run adsbfi-proxy on the same machine; see its README for installation,
+reference-data imports, accuracy measurements and known limitations.
 
-A complete historical rebuild is a serious data operation, not a quick demo.
-The builder reads 30-minute heatmap files and a full cache is very large.
-
-> **Be considerate of ADS-B Exchange.** Obtaining or backfilling a complete cache
-> can make **more than 1 TB of requests and downloads** from ADS-B Exchange. Do
-> not launch parallel bulk fetches, respect the provider's terms and rate limits,
-> and obtain permission before attempting a historical backfill. Reuse an
-> authorized local cache whenever possible.
-
-Using an accessible URL does not grant rights to publish the resulting data or a
-derived public service. Before a deployment, confirm that your ADS-B Exchange
-agreement permits the specific acquisition, retention, derivative-event, and
-publication use you intend. The provider's [service terms](https://www.adsbexchange.com/terms-of-use-011425/)
-place restrictions on mass export and redistribution unless they are expressly
-authorized.
-
-Generated data is intentionally ignored by Git. Do not commit or publish a cache,
-SQLite database, auth database, update status file, or screenshots. In particular,
+Generated data is intentionally ignored by Git. Do not commit or publish an
+adsbfi-proxy database, the PJET auth database, or screenshots. In particular,
 `aircraft.sqlite` can contain FAA registrant fields, and `auth.sqlite` contains
 credential hashes and session-signing material.
 
 ## Requirements
 
 - Node.js 20 or newer
-- Python 3.12 or newer with [uv](https://docs.astral.sh/uv/)
-- Rust, only when using the faster Rust event builder or the incremental updater
-- An ADS-B Exchange heatmap cache to build events
+- A running [adsbfi-proxy](https://github.com/kylemcdonald/adsbfi-proxy)
+  installation and its database directory
+- Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), only for the
+  optional EUROCONTROL Slow Model
 
 Install the application dependencies:
 
 ```sh
-uv sync
 npm ci
+uv sync   # optional, for the EUROCONTROL Slow Model
 ```
 
-## Data locations and external volumes
+## Configuration
 
-By default, PJET writes all generated files under the ignored `data/` directory:
+PJET keeps two directories apart:
 
-```text
-data/
-  pjet/       # events.sqlite, airports.sqlite, aircraft.sqlite, build_state.sqlite, auth.sqlite
-  adsbx/      # YYYY/MM/DD/SS.bin.ttf heatmap cache
-  aircraft/   # optional ADS-B Exchange, tar1090, and OpenSky metadata inputs
-  faa/        # optional FAA ReleasableAircraft.zip input
-```
+| Variable | Default | Contents |
+| --- | --- | --- |
+| `PJET_ADSBFI_DB_DIR` | `$ADSBFI_DB_DIR`, else `../adsbfi-proxy/data/db` | adsbfi-proxy's `events.sqlite`, `airports.sqlite`, `aircraft.sqlite`, `build_state.sqlite` and `proxy-status.json`; read only |
+| `PJET_DB_DIR` | `$PJET_DATA_DIR/pjet` | PJET's own `auth.sqlite` |
+| `PJET_DATA_DIR` | `data/` | root for PJET's own ignored files, including the default `eurocontrol.csv` |
 
-For a historical rebuild, keep the large cache on an external or attached volume.
-The location is deliberately configurable rather than embedded in the code:
+The defaults suit an adsbfi-proxy checkout next to this repository. The server
+also accepts `--adsbfi-db-dir` and `--db-dir`. PJET needs read access to the
+adsbfi-proxy databases; running it as the same user as the adsbfi-proxy worker
+is simplest.
 
-```sh
-# One root for all ignored local data.
-export PJET_DATA_DIR=/path/to/large-volume/pjet-data
+## Flights
 
-# Or override individual locations when the cache and databases are separate.
-export PJET_DB_DIR=/path/to/database-volume/pjet
-export PJET_ADSBX_CACHE_DIR=/path/to/heatmap-cache
-export PJET_AIRCRAFT_CACHE_DIR=/path/to/aircraft-inputs
-export PJET_FAA_ZIP=/path/to/faa/ReleasableAircraft.zip
-```
+adsbfi-proxy records each takeoff and landing as a separate movement and never
+pairs them itself. PJET pairs them when it runs a query. A flight is a takeoff
+followed directly by a landing of the same aircraft, with no other movement in
+between, and the landing comes at most 20 hours after the takeoff. Movements
+without such a partner are not flights and are left out of results, airport
+counts and emissions, because an estimate needs both airports. A longer gap
+means intermediate movements went unobserved.
 
-`PJET_DB_DIR` is also used by the Node server and Rust builder. The Python builder
-uses the same variables, so one configuration works across the toolchain.
-
-## Build the databases
-
-First build the small reference databases. Airport data is downloaded from
-OurAirports. Aircraft metadata inputs are optional individually, but supplying
-authoritative source files is strongly recommended for useful classifications:
-
-```sh
-uv run pjet import-airports
-uv run pjet import-aircraft \
-  --faa-zip "$PJET_FAA_ZIP" \
-  --adsbx-basic-db "$PJET_AIRCRAFT_CACHE_DIR/basic-ac-db.json.gz" \
-  --tar1090-db "$PJET_AIRCRAFT_CACHE_DIR/tar1090-aircraft.csv.gz" \
-  --opensky-csv "$PJET_AIRCRAFT_CACHE_DIR/opensky-aircraft-database.csv"
-```
-
-Then process an existing heatmap cache. Start with a narrow period while verifying
-your setup:
-
-```sh
-uv run pjet build-events --start 2026-05-01 --end 2026-05-06 --reset
-```
-
-Omit `--start` and `--end` only when you intentionally want to process every file
-available in the configured cache. The builder checkpoints processed files and keeps
-rolling aircraft state in `build_state.sqlite`, so subsequent runs add only newly
-completed events.
-
-### Faster Rust builder
-
-The Rust implementation writes the same event and state schemas and is recommended
-for large historical rebuilds:
-
-```sh
-cd rust/pjet
-cargo build --release
-cd ../..
-./rust/pjet/target/release/pjet build-events --start 2026-05-01 --end 2026-05-06 --reset
-```
-
-The incremental updater in `scripts/update-events.mjs` downloads missing
-30-minute slots and should only be used after the database and state files have
-been initialized. It is not a substitute for permission to bulk-download history.
+A flight matches a query when its takeoff is at a selected airport within the
+time range, or its landing is. A flight's ID is its takeoff movement's
+`endpoint_id` in the adsbfi-proxy ledger.
 
 ## Optional EUROCONTROL SET curves
 
@@ -159,32 +107,29 @@ export PJET_PASSWORD="$(openssl rand -base64 32)"
 HOST=127.0.0.1 PORT=8080 npm run serve
 ```
 
-Open `http://127.0.0.1:8080/`. Use `/admin` to create or revoke journalist
+Open `http://127.0.0.1:8080/`. `/info` shows the ledger's time range and the
+adsbfi-proxy worker's status. Use `/admin` to create or revoke journalist
 vouchers. A voucher value is displayed only when it is created, so save it securely.
 For an internet-facing deployment, keep the Node process behind HTTPS and add
 network-level request limits in the reverse proxy or edge service. PJET also applies
 a small in-memory login-failure limit, but that is not a replacement for perimeter
 protection.
 
-### Optional Cloudflare D1 worker
-
-`workers/d1-api.js` is an alternative API backend, not part of the local server
-above. It fails closed until a deployment configures the `PJET_API_TOKEN` Worker
-secret; send that token as `Authorization: Bearer …`. Do not put the token in
-`wrangler.toml`, frontend code, or a commit.
-
 ## Storage and server sizing
 
-The current complete `events.sqlite` is about **31.7 GB (29.5 GiB)**. Plan for at
-least 100 GB of fast SSD storage for the database, indexes, WAL files, and operating
-headroom; 200 GB or more is more comfortable if you retain backups or expect growth.
+The PJET server itself needs little storage. Its working set is the adsbfi-proxy
+ledger: `events.sqlite` was about **17 GB** in November 2026, covering movements
+since January 2023, and it grows as the worker adds new files. Plan for fast SSD
+storage with room for the ledger's growth and WAL files. A DigitalOcean Basic
+Droplet with 2 vCPUs, 4 GB RAM and 120 GB disk serves PJET and runs the
+adsbfi-proxy worker.
 
-The production reader/updater currently runs successfully on a DigitalOcean Basic
-Droplet with **2 vCPUs, 4 GB RAM, and 120 GB disk**. That is a practical minimum for
-serving the existing database. For a new public service, 4 vCPUs, 8 GB RAM, and
-200 GB+ NVMe storage provide better query and maintenance headroom. A complete
-historical cache needs a separate large volume—budget at least 2 TB—and a 4-vCPU,
-16-GB-RAM machine is a sensible starting point for a full rebuild.
+## Checks
+
+```sh
+npm run check
+npm test
+```
 
 ## API
 
@@ -194,6 +139,8 @@ voucher session.
 `GET /api/airports?minLat=&minLon=&maxLat=&maxLon=&type=` returns airports inside a
 rectangular bounding box. `type` is optional and matches an airport type label such
 as `heliport`, `small_airport`, or `large_airport`.
+
+`GET /api/events/range` returns the ledger's movement count and time range.
 
 `POST /api/events` accepts:
 
@@ -206,4 +153,6 @@ as `heliport`, `small_airport`, or `large_airport`.
 }
 ```
 
-It returns matching events, airport operation counts, and emissions estimates.
+It returns matching flights, airport operation counts, and emissions estimates.
+`POST /api/events/stream` returns the same results as newline-delimited JSON chunks.
+`GET /api/events/:eventId` returns one flight with a detailed emissions breakdown.
