@@ -1,6 +1,6 @@
 # Emissions Profile Sources
 
-The API uses these aircraft profiles for the adapted Travel Impact Model implementation. Each profile stores a fuel-use source and a speed source in `server/index.js`; the selected profile and citations are returned with every estimated event.
+The Combined Model uses these aircraft profiles for its Adapted Travel Impact Model (ATIM) fallback, when an aircraft has no usable EUROCONTROL curve. Each profile stores a fuel-use source and a speed source in `server/index.js`; the selected profile and citations are returned with every estimated event.
 
 The original `bizjet-impact-calculator` introduced Phenom 300, Citation CJ4, Gulfstream G650, and Global 7500 constants as local demo data in its initial `app.py` commit, without per-profile citations. Its README references Conklin & de Decker-derived summaries as implementation background, but it does not map individual constants to source rows. For this API, the seed profiles below use direct public model sources where a matching fuel or speed value is available.
 

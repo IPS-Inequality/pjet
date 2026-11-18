@@ -495,55 +495,12 @@ td {
   width: 39%;
 }
 
-.source-column {
-  width: 10%;
-}
-
 .numeric-column {
   width: 11%;
 }
 
 .emissions-column {
   width: 18%;
-}
-
-.gph-source-icon {
-  width: 24px;
-  height: 24px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-}
-
-.gph-source-icon svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.2;
-}
-
-.gph-source-ground-truth {
-  color: #247247;
-  background: #eef8f1;
-}
-
-.gph-source-placeholder {
-  color: #9a5f00;
-  background: #fff7e8;
-}
-
-.gph-source-mixed {
-  color: #336486;
-  background: #eef6fb;
-}
-
-.gph-source-unavailable {
-  color: #69746f;
-  background: #f5f7f5;
 }
 
 .sort-header-button {

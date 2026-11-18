@@ -31,7 +31,7 @@ const DEFAULT_SORT_DIRECTION = "asc";
 const DEFAULT_MODEL_SORT_KEY = "emissions";
 const DEFAULT_MODEL_SORT_DIRECTION = "desc";
 const FLIGHT_SORT_KEYS = new Set(["n_number", "aircraft_type", "model", "takeoff_time", "landing_time", "emissions"]);
-const MODEL_SORT_KEYS = new Set(["model", "gph_source", "flights", "estimated", "hours", "gph", "emissions"]);
+const MODEL_SORT_KEYS = new Set(["model", "flights", "estimated", "emissions"]);
 const URL_STATE_DECIMALS = 5;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const DATE_RANGE_REFRESH_MIN_MS = 1000;
@@ -186,10 +186,6 @@ function formatHoursCell(hours, decimals = 2) {
   return Number(hours).toFixed(decimals);
 }
 
-function formatNumberCell(value, decimals = 1) {
-  if (!Number.isFinite(value)) return "";
-  return Number(value).toFixed(decimals);
-}
 
 function formatDecimal(value, decimals = 1) {
   if (!Number.isFinite(value)) return "None";
@@ -218,10 +214,6 @@ function formatDistanceKm(value) {
   return `${formatDecimal(value, 1)} km`;
 }
 
-function formatFuelGallons(value) {
-  if (!Number.isFinite(value)) return "None";
-  return `${formatDecimal(value, 1)} gal`;
-}
 
 function formatFuelGph(value) {
   if (!Number.isFinite(value)) return "None";
@@ -1106,12 +1098,7 @@ function sourceHtml(source) {
 function emissionsMethodologyLabel(emissions) {
   if (!emissions) return "None";
   if (emissions.label) return emissions.label;
-  if (emissions.methodology === "adapted_tim") return "Adapted Travel Impact Model";
   return emissions.methodology || "Unknown";
-}
-
-function isAdaptedTimMethodology(methodology = currentResultEmissionsMethodology()) {
-  return methodology === "adapted_tim";
 }
 
 function isCombinedMethodology(methodology = currentResultEmissionsMethodology()) {
@@ -1120,18 +1107,6 @@ function isCombinedMethodology(methodology = currentResultEmissionsMethodology()
 
 function isEurocontrolFastMethodology(methodology = currentResultEmissionsMethodology()) {
   return methodology === "eurocontrol_fast";
-}
-
-function isGhgcMethodology(methodology = currentResultEmissionsMethodology()) {
-  return String(methodology || "").startsWith("ghgc.methods.");
-}
-
-function isEurocontrolTtwOnlyMethodology(methodology = currentResultEmissionsMethodology()) {
-  return isGhgcMethodology(methodology) || isEurocontrolFastMethodology(methodology);
-}
-
-function hasSplitEmissionsComponents(methodology = currentResultEmissionsMethodology()) {
-  return isAdaptedTimMethodology(methodology) || isCombinedMethodology(methodology);
 }
 
 function hasEmissionsTotal(emissions) {
@@ -1145,13 +1120,13 @@ function unsupportedReasonLabel(reason) {
   return String(reason).replaceAll("_", " ");
 }
 
-function ghgcEstimateStatus(emissions) {
+function emissionsEstimateStatus(emissions) {
   if (emissions?.unsupportedReason) return unsupportedReasonLabel(emissions.unsupportedReason);
   return hasEmissionsTotal(emissions) ? "Estimated" : "Unsupported";
 }
 
 function shouldShowWellToTank(methodology = currentResultEmissionsMethodology()) {
-  return state.includeWellToTank !== false && hasSplitEmissionsComponents(methodology);
+  return state.includeWellToTank !== false && isCombinedMethodology(methodology);
 }
 
 function emissionsComponentBreakdownText(
@@ -1169,8 +1144,7 @@ function emissionsComponentBreakdownText(
 }
 
 function emissionsSelectedScopeText(emissions) {
-  if (isEurocontrolTtwOnlyMethodology(emissions?.methodology || state.emissions?.methodology)) return "TTW only";
-  if (!hasSplitEmissionsComponents(state.emissions?.methodology)) return "";
+  if (isEurocontrolFastMethodology(emissions?.methodology || state.emissions?.methodology)) return "TTW only";
   return "";
 }
 
@@ -1181,7 +1155,7 @@ function emissionsTotalText(emissions) {
 
 function emissionsTotalTooltip(emissions) {
   if (!hasEmissionsTotal(emissions)) return "";
-  if (isEurocontrolTtwOnlyMethodology(emissions?.methodology || state.emissions?.methodology)) {
+  if (isEurocontrolFastMethodology(emissions?.methodology || state.emissions?.methodology)) {
     return `${emissionsMethodologyLabel(state.emissions)} · TTW only · ${emissions.gasBasis || state.emissions?.gasBasis || "CO2 from fuel burn"}`;
   }
   if (!shouldShowWellToTank(emissions?.methodology || state.emissions?.methodology)) return "";
@@ -1195,9 +1169,9 @@ function emissionsStatusText(emissions) {
 
 function emissionsColumnLabel(unit = "", methodology = currentResultEmissionsMethodology()) {
   let label;
-  if (isEurocontrolTtwOnlyMethodology(methodology)) {
+  if (isEurocontrolFastMethodology(methodology)) {
     label = "CO2e TTW";
-  } else if (hasSplitEmissionsComponents(methodology)) {
+  } else if (isCombinedMethodology(methodology)) {
     label = state.includeWellToTank === false ? "CO2e TTW" : "CO2e TTW+WTT";
   } else {
     label = "CO2e";
@@ -1207,16 +1181,13 @@ function emissionsColumnLabel(unit = "", methodology = currentResultEmissionsMet
 
 function emissionsRowSubtitle(emissions) {
   if (!emissions) return "";
-  if (hasSplitEmissionsComponents(state.emissions?.methodology)) {
+  if (isCombinedMethodology(state.emissions?.methodology)) {
     const breakdown = shouldShowWellToTank(state.emissions?.methodology)
       ? emissionsComponentBreakdownText(emissions, { formatter: formatEmissionsTons })
       : "";
-    if (isCombinedMethodology(state.emissions?.methodology)) {
-      return [emissions.aircraftIcaoCode || emissions.profile || "", breakdown].filter(Boolean).join(" · ");
-    }
-    return [emissions.profile || "", breakdown].filter(Boolean).join(" · ");
+    return [emissions.aircraftIcaoCode || emissions.profile || "", breakdown].filter(Boolean).join(" · ");
   }
-  if (isEurocontrolTtwOnlyMethodology(state.emissions?.methodology)) {
+  if (isEurocontrolFastMethodology(state.emissions?.methodology)) {
     if (emissions.unsupportedReason) return unsupportedReasonLabel(emissions.unsupportedReason);
     return emissions.aircraftIcaoCode || "";
   }
@@ -1324,16 +1295,10 @@ function modelGroupSortComparator(left, right) {
   let result = 0;
   if (state.sortKey === "emissions") {
     result = compareEmissions(left, right);
-  } else if (state.sortKey === "gph_source") {
-    result = compareNumber(gphSourceRank(left.gphSource), gphSourceRank(right.gphSource));
-  } else if (state.sortKey === "gph") {
-    result = compareNumber(left.gph, right.gph);
   } else if (state.sortKey === "flights") {
     result = compareNumber(left.eventCount, right.eventCount);
   } else if (state.sortKey === "estimated") {
     result = compareNumber(left.estimatedEventCount, right.estimatedEventCount);
-  } else if (state.sortKey === "hours") {
-    result = compareNumber(left.totalHours, right.totalHours);
   } else {
     result = compareText(left.modelName, right.modelName);
   }
@@ -1358,13 +1323,6 @@ function updateSortedResults() {
   } else {
     updateSortedEvents();
   }
-}
-
-function gphSourceRank(value) {
-  if (value === "ground_truth") return 0;
-  if (value === "mixed") return 1;
-  if (value === "placeholder") return 2;
-  return 3;
 }
 
 function aircraftTypeLabel(value) {
@@ -1416,50 +1374,6 @@ function resultColumns(hasTypeColumn) {
 }
 
 function modelColumns() {
-  if (isEurocontrolTtwOnlyMethodology() || isCombinedMethodology()) {
-    return [
-      {
-        label: "MODEL",
-        sortKey: "model",
-        className: "model-name-column",
-        title: "Normalized aircraft model group.",
-      },
-      {
-        label: "#",
-        sortKey: "flights",
-        className: "numeric-column",
-        title: "Number of flights in this model group.",
-      },
-      {
-        label: emissionsColumnLabel("t"),
-        sortKey: "emissions",
-        className: "numeric-column emissions-column",
-        title: "Total estimated CO2e for all flights in this model group.",
-      },
-    ];
-  }
-  if (!isAdaptedTimMethodology()) {
-    return [
-      {
-        label: "MODEL",
-        sortKey: "model",
-        className: "model-name-column",
-        title: "Normalized aircraft model group.",
-      },
-      {
-        label: "#",
-        sortKey: "flights",
-        className: "numeric-column",
-        title: "Number of flights in this model group.",
-      },
-      {
-        label: emissionsColumnLabel("t"),
-        sortKey: "emissions",
-        className: "numeric-column emissions-column",
-        title: "Total estimated CO2e for all flights in this model group.",
-      },
-    ];
-  }
   return [
     {
       label: "MODEL",
@@ -1468,28 +1382,10 @@ function modelColumns() {
       title: "Normalized aircraft model group.",
     },
     {
-      label: "SRC",
-      sortKey: "gph_source",
-      className: "source-column",
-      title: "Fuel-burn source quality for this model's gallons-per-hour estimate.",
-    },
-    {
       label: "#",
       sortKey: "flights",
       className: "numeric-column",
       title: "Number of flights in this model group.",
-    },
-    {
-      label: "HRS",
-      sortKey: "hours",
-      className: "numeric-column",
-      title: "Total estimated flight hours for this model group.",
-    },
-    {
-      label: "GPH",
-      sortKey: "gph",
-      className: "numeric-column",
-      title: "Average gallons per hour used for this model group's estimates.",
     },
     {
       label: emissionsColumnLabel("t"),
@@ -1684,7 +1580,7 @@ function flightCsvRows(events) {
     event.landingAirportCode || "",
     formatDateTime(event.landingTime),
   ];
-  if (isEurocontrolTtwOnlyMethodology()) {
+  if (isEurocontrolFastMethodology()) {
     const header = [
       ...baseHeader,
       "tCO2e TTW",
@@ -1692,7 +1588,6 @@ function flightCsvRows(events) {
       "Scope",
       "Gas basis",
       "Aircraft ICAO type",
-      "Aircraft IATA type",
       "Observed duration (hr)",
       "Status",
     ];
@@ -1707,9 +1602,8 @@ function flightCsvRows(events) {
           emissions.scopeLabel || state.emissions?.scopeLabel || "Whole flight",
           emissions.gasBasis || state.emissions?.gasBasis || "CO2 from fuel burn",
           emissions.aircraftIcaoCode || "",
-          emissions.aircraftIataCode || "",
           formatHoursCell(eventDurationHours(event)),
-          ghgcEstimateStatus(emissions),
+          emissionsEstimateStatus(emissions),
         ];
       }),
     ];
@@ -1743,34 +1637,12 @@ function flightCsvRows(events) {
       }),
     ];
   }
-  if (!isAdaptedTimMethodology()) {
-    const header = [...baseHeader, "Observed duration (hr)"];
-    return [header, ...events.map((event) => [...baseRow(event), formatHoursCell(eventDurationHours(event))])];
-  }
-  const includeWtt = shouldShowWellToTank();
-  const header = [
-    ...baseHeader,
-    ...(includeWtt ? ["tCO2e WTT"] : []),
-    "tCO2e TTW",
-    "Emissions profile",
-    "Flight duration (hr)",
-    "GPH estimate",
-  ];
-  return [
-    header,
-    ...events.map((event) => [
-      ...baseRow(event),
-      ...(includeWtt ? [formatTonsCell(event.emissions?.wellToTankCo2eKg)] : []),
-      formatTonsCell(event.emissions?.tankToWakeCo2eKg),
-      event.emissions?.profile || "",
-      formatHoursCell(event.emissions?.flightTimeHours),
-      formatNumberCell(event.emissions?.burnGph),
-    ]),
-  ];
+  const header = [...baseHeader, "Observed duration (hr)"];
+  return [header, ...events.map((event) => [...baseRow(event), formatHoursCell(eventDurationHours(event))])];
 }
 
 function modelCsvRows(groups) {
-  if (isEurocontrolTtwOnlyMethodology()) {
+  if (isEurocontrolFastMethodology()) {
     return [
       ["Model", "Flights", "Estimated flights", "Unsupported flights", "tCO2e TTW", "Emissions method", "Scope", "Gas basis"],
       ...groups.map((group) => [
@@ -1812,24 +1684,9 @@ function modelCsvRows(groups) {
       ]),
     ];
   }
-  if (!isAdaptedTimMethodology()) {
-    return [
-      ["Model", "Flights"],
-      ...groups.map((group) => [group.modelName || "Unknown model", formatNumber(group.eventCount)]),
-    ];
-  }
-  const includeWtt = shouldShowWellToTank();
   return [
-    ["Model", "GPH source", "Flights", "Hours (hr)", "GPH", ...(includeWtt ? ["tCO2e WTT"] : []), "tCO2e TTW"],
-    ...groups.map((group) => [
-      group.modelName || "Unknown model",
-      gphSourceLabel(group),
-      formatNumber(group.eventCount),
-      formatHoursCell(group.totalHours),
-      formatNumberCell(group.gph),
-      ...(includeWtt ? [formatTonsCell(group.wellToTankCo2eKg)] : []),
-      formatTonsCell(group.tankToWakeCo2eKg),
-    ]),
+    ["Model", "Flights"],
+    ...groups.map((group) => [group.modelName || "Unknown model", formatNumber(group.eventCount)]),
   ];
 }
 
@@ -1869,21 +1726,6 @@ function exportVisibleResults() {
         ? modelCsvRows(state.sortedModelGroups)
         : flightCsvRows(state.sortedEvents);
   downloadCsv(exportFilename(), rows);
-}
-
-function gphSourceLabel(source) {
-  const value = typeof source === "string" ? source : source?.gphSource;
-  const domains = Array.isArray(source?.gphSourceDomains) ? source.gphSourceDomains : [];
-  if (domains.length) {
-    const domainText = domains.join("; ");
-    if (value === "placeholder") return `${domainText} (placeholder)`;
-    if (value === "mixed") return `${domainText} (mixed)`;
-    return domainText;
-  }
-  if (value === "ground_truth") return "GPH source domain unavailable";
-  if (value === "placeholder") return "Placeholder GPH";
-  if (value === "mixed") return "Mixed GPH sources";
-  return "GPH source unavailable";
 }
 
 function addMillisecondsToLocalInput(value, milliseconds) {
@@ -2060,29 +1902,6 @@ async function loadTypicalResults() {
       state.currentTypicalAbortController = null;
     }
   }
-}
-
-function gphSourceIcon(source) {
-  const value = typeof source === "string" ? source : source?.gphSource;
-  const label = gphSourceLabel(source);
-  if (value === "ground_truth") {
-    return `<span class="gph-source-icon gph-source-ground-truth" role="img" aria-label="${escapeHtml(
-      label
-    )}" title="${escapeHtml(label)}"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg></span>`;
-  }
-  if (value === "placeholder") {
-    return `<span class="gph-source-icon gph-source-placeholder" role="img" aria-label="${escapeHtml(
-      label
-    )}" title="${escapeHtml(label)}"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z" /><path d="M12 9v5" /><path d="M12 17h.01" /></svg></span>`;
-  }
-  if (value === "mixed") {
-    return `<span class="gph-source-icon gph-source-mixed" role="img" aria-label="${escapeHtml(
-      label
-    )}" title="${escapeHtml(label)}"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h10" /><path d="m10 3 4 4-4 4" /><path d="M20 17H10" /><path d="m14 13-4 4 4 4" /></svg></span>`;
-  }
-  return `<span class="gph-source-icon gph-source-unavailable" role="img" aria-label="${escapeHtml(
-    label
-  )}" title="${escapeHtml(label)}"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9 9a3 3 0 0 1 6 1c0 2-3 2-3 4" /><path d="M12 17h.01" /></svg></span>`;
 }
 
 function cycleSort(sortKey) {
@@ -2414,50 +2233,15 @@ function renderFlightDetail(event) {
     sections.push(`<section class="detail-section"><h3>Registration</h3>${detailList(ownerRows)}</section>`);
   }
 
-  if (emissions && isAdaptedTimMethodology(currentResultEmissionsMethodology())) {
-    const includeWtt = shouldShowWellToTank();
-    const profileRows = [
-      ["Methodology", "Adapted Travel Impact Model"],
-      ["Profile", escapeHtml(emissions.profile || "Unknown")],
-      ["Profile ID", escapeHtml(emissions.profileKey || "Unknown")],
-      ["Profile selection", escapeHtml(profileSourceLabel(emissions.profileSource))],
-      ["Fuel burn", escapeHtml(`${formatFuelGallons(emissions.burnGph)} per hour`)],
-      ["Cruise speed", escapeHtml(formatSpeed(emissions.speedKts))],
-      ["Fuel source", sourceHtml(emissions.fuelSource)],
-      ["Speed source", sourceHtml(emissions.speedSource)],
-    ];
-    const calculationRows = [
-      ["Great-circle distance", escapeHtml(formatDistanceNm(emissions.greatCircleNm))],
-      ["Adjusted distance", escapeHtml(formatDistanceNm(emissions.adjustedDistanceNm))],
-      ["Route extra", escapeHtml(formatDistanceNm(emissions.routeExtraNm))],
-      ["Estimated flight duration", escapeHtml(formatHours(emissions.flightTimeHours))],
-      ["LTO fuel", escapeHtml(formatFuelGallons(emissions.ltoGallons))],
-      ["Cruise fuel", escapeHtml(formatFuelGallons(emissions.cruiseFuelGallons))],
-      ["Total fuel", escapeHtml(formatFuelGallons(emissions.totalFuelGallons))],
-      ["Fuel mass", escapeHtml(formatFuelKg(emissions.totalFuelKg))],
-      ["Tank-to-wake CO2e", escapeHtml(formatCo2eKg(emissions.tankToWakeCo2eKg))],
-      ...(includeWtt ? [["Well-to-tank CO2e", escapeHtml(formatCo2eKg(emissions.wellToTankCo2eKg))]] : []),
-    ];
-    calculationRows.push(["Total CO2e", escapeHtml(formatCo2eKg(emissions.totalCo2eKg))]);
-    const factorRows = [
-      ["Lateral inefficiency", escapeHtml(formatDecimal(emissions.lateralInefficiencyFactor, 3))],
-      ["Jet A mass", escapeHtml(`${formatDecimal(emissions.jetAKgPerGallon, 2)} kg fuel/gal`)],
-      ["Tank-to-wake factor", escapeHtml(`${formatDecimal(emissions.tankToWakeFactor, 4)} kg CO2e/kg fuel`)],
-      ...(includeWtt ? [["Well-to-tank factor", escapeHtml(`${formatDecimal(emissions.wellToTankFactor, 4)} kg CO2e/kg fuel`)]] : []),
-    ];
-    sections.push(`<section class="detail-section"><h3>Profile</h3>${detailList(profileRows)}</section>`);
-    sections.push(`<section class="detail-section"><h3>Calculation</h3>${detailList(calculationRows)}</section>`);
-    sections.push(`<section class="detail-section"><h3>Factors</h3>${detailList(factorRows)}</section>`);
-  } else if (emissions && (isCombinedMethodology(currentResultEmissionsMethodology()) || isEurocontrolFastMethodology(currentResultEmissionsMethodology()))) {
+  if (emissions) {
     const includeWtt = shouldShowWellToTank();
     const methodRows = [
       ["Methodology", escapeHtml(emissionsMethodologyLabel(state.emissions))],
-      ["Status", escapeHtml(ghgcEstimateStatus(emissions))],
+      ["Status", escapeHtml(emissionsEstimateStatus(emissions))],
       ["Accounting", escapeHtml(isCombinedMethodology(currentResultEmissionsMethodology()) && includeWtt ? "TTW + WTT" : "TTW only")],
       ["Calculation source", escapeHtml(emissions.calculationSource || "Unknown")],
       ["Fallback reason", escapeHtml(emissions.fallbackReason || "None")],
       ["Aircraft ICAO type", escapeHtml(emissions.aircraftIcaoCode || "Unknown")],
-      ["Aircraft IATA type", escapeHtml(emissions.aircraftIataCode || "Unknown")],
       ["Curve basis", escapeHtml(emissions.eurocontrolCurveBasis || "Unknown")],
       ["Curve source", escapeHtml(emissions.eurocontrolCurveSource || "None")],
     ];
@@ -2490,19 +2274,6 @@ function renderFlightDetail(event) {
     if (isCombinedMethodology(currentResultEmissionsMethodology())) {
       sections.push(`<section class="detail-section"><h3>ATIM Fallback Profile</h3>${detailList(profileRows)}</section>`);
     }
-  } else if (emissions) {
-    const ghgcRows = [
-      ["Methodology", escapeHtml(emissionsMethodologyLabel(state.emissions))],
-      ["Library method", escapeHtml(state.emissions?.methodology || "Unknown")],
-      ["Status", escapeHtml(ghgcEstimateStatus(emissions))],
-      ["Accounting", "TTW only"],
-      ["Scope", escapeHtml(emissions.scopeLabel || "Whole flight")],
-      ["Gas basis", escapeHtml(emissions.gasBasis || "CO2 from fuel burn")],
-      ["Aircraft ICAO type", escapeHtml(emissions.aircraftIcaoCode || "Unknown")],
-      ["Aircraft IATA type", escapeHtml(emissions.aircraftIataCode || "Unknown")],
-      ["Total emissions (TTW)", escapeHtml(formatCo2eKg(emissions.totalCo2eKg))],
-    ];
-    sections.push(`<section class="detail-section"><h3>Emissions</h3>${detailList(ghgcRows)}</section>`);
   } else {
     sections.push(
       `<section class="detail-section"><h3>Emissions</h3>${detailList([
@@ -2783,7 +2554,6 @@ async function loadMeta() {
     ? meta.emissionsMethodologies
     : [
         { value: "combined", label: "Combined Model" },
-        { value: "adapted_tim", label: "Adapted Travel Impact Model" },
         { value: "none", label: "None" },
       ];
   for (const methodology of methodologies) {
@@ -3014,7 +2784,7 @@ function renderModelRows(groups, columns) {
     groups
       .map((group) => {
         const emissionsDetail =
-          isEurocontrolTtwOnlyMethodology() || !shouldShowWellToTank()
+          isEurocontrolFastMethodology() || !shouldShowWellToTank()
             ? ""
             : [
                 emissionsSelectedScopeText(group),
@@ -3024,11 +2794,8 @@ function renderModelRows(groups, columns) {
                 .join(" · ");
         const values = {
           model: `<strong>${escapeHtml(group.modelName)}</strong>`,
-          gph_source: gphSourceIcon(group),
           flights: `<strong>${escapeHtml(formatNumber(group.eventCount))}</strong>`,
           estimated: `<strong>${escapeHtml(formatNumber(group.estimatedEventCount))}</strong>`,
-          hours: `<strong>${escapeHtml(formatHours(group.totalHours))}</strong>`,
-          gph: `<strong>${escapeHtml(formatFuelGph(group.gph))}</strong>`,
           emissions: `<strong>${escapeHtml(formatEmissionsTons(group.totalCo2eKg))}</strong>${
             emissionsDetail ? `<span>${escapeHtml(emissionsDetail)}</span>` : ""
           }`,

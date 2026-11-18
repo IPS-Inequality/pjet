@@ -3,7 +3,6 @@ import Database from "better-sqlite3";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ADMIN_ROLE, VOUCHER_ROLE, openAuthStore } from "./auth-store.js";
 import {
@@ -78,14 +77,9 @@ const EUROCONTROL_MAX_DISTANCE_NM = 999_999;
 const EUROCONTROL_JET_TURBOPROP_CO2_COEFF = 3.16;
 const EUROCONTROL_CURVES_PATH = path.resolve(process.env.PJET_EUROCONTROL_CURVES || path.join(DEFAULT_DATA_DIR, "eurocontrol.csv"));
 const EUROCONTROL_CURVES = loadEurocontrolCurves(EUROCONTROL_CURVES_PATH);
-const GHGC_METHODOLOGIES = EUROCONTROL_CURVES.size
-  ? [{ value: "ghgc.methods.eurocontrol", label: "EUROCONTROL Slow Model" }]
-  : [];
 const EMISSIONS_METHODOLOGIES = [
   { value: COMBINED_METHODOLOGY, label: COMBINED_LABEL },
   ...(EUROCONTROL_CURVES.size ? [{ value: EUROCONTROL_FAST_METHODOLOGY, label: EUROCONTROL_FAST_LABEL }] : []),
-  { value: "adapted_tim", label: "Adapted Travel Impact Model" },
-  ...GHGC_METHODOLOGIES,
   { value: "none", label: "None" },
 ];
 const EMISSIONS_METHODOLOGY_LABELS = new Map(
@@ -94,7 +88,6 @@ const EMISSIONS_METHODOLOGY_LABELS = new Map(
     [methodology.label, methodology],
   ])
 );
-const GHGC_METHODOLOGY_VALUES = new Set(GHGC_METHODOLOGIES.map((methodology) => methodology.value));
 
 const AIRCRAFT_PROFILES = [
   {
@@ -3116,17 +3109,6 @@ function loadEurocontrolCurves(filename) {
   );
 }
 
-function loadAircraftIataByIcao() {
-  const rows = parseCsvRows(fs.readFileSync(path.join(ROOT_DIR, "vendor", "flight-emissions", "data", "aircraft", "iata.csv"), "utf8"));
-  return new Map(
-    rows
-      .filter((row) => row["ICAO Code"])
-      .map((row) => [row["ICAO Code"].trim().toUpperCase(), (row["Aircraft Type"] || row["Aircraft Group"] || "").trim() || null])
-  );
-}
-
-const AIRCRAFT_IATA_BY_ICAO = loadAircraftIataByIcao();
-
 // Registry designators that lack a SET curve but are variants of a type that
 // has one, and are close enough to share it.
 const EUROCONTROL_REGISTRY_TYPE_ALIASES = new Map([
@@ -3168,7 +3150,6 @@ function eurocontrolCurveForRow(row) {
   return {
     aircraftIcaoCode,
     aircraftIcaoCodeBasis: resolved?.basis || null,
-    aircraftIataCode: aircraftIcaoCode ? AIRCRAFT_IATA_BY_ICAO.get(aircraftIcaoCode) || null : null,
     curve: aircraftIcaoCode ? EUROCONTROL_CURVES.get(aircraftIcaoCode) || null : null,
   };
 }
@@ -3335,6 +3316,8 @@ function selectAircraftProfile(row, cache = null) {
   return selectedProfile;
 }
 
+// ATIM is not offered as a model of its own: the Combined Model uses its
+// profile-based estimate when an aircraft has no usable EUROCONTROL curve.
 function estimateAdaptedTimEmissions(row, options = {}) {
   const includeWellToTank = options.includeWellToTank !== false;
   const detail = options.detail === true;
@@ -3384,7 +3367,6 @@ function estimateAdaptedTimEmissions(row, options = {}) {
   const totalCo2eKg = includeWellToTank ? totalWithWellToTankCo2eKg : totalWithoutWellToTankCo2eKg;
 
   const baseEstimate = {
-    methodology: "adapted_tim",
     includeWellToTank,
     profileKey: profile.key,
     profile: profile.name,
@@ -3501,7 +3483,7 @@ function estimateEurocontrolFastEmissions(row, options = {}) {
   const detail = options.detail === true;
   const routeCache = options.routeCache || null;
   const estimateCache = options.estimateCache || null;
-  const { aircraftIcaoCode, aircraftIcaoCodeBasis, aircraftIataCode, curve } = eurocontrolCurveForRow(row);
+  const { aircraftIcaoCode, aircraftIcaoCodeBasis, curve } = eurocontrolCurveForRow(row);
   const routeCacheKey = routeDistanceCacheKey(row);
   const estimateCacheKey = estimateCache
     ? eurocontrolEstimateCacheKey(EUROCONTROL_FAST_METHODOLOGY, aircraftIcaoCode, null, routeCacheKey, false, detail)
@@ -3514,7 +3496,6 @@ function estimateEurocontrolFastEmissions(row, options = {}) {
     scopeLabel: "Whole flight",
     gasBasis: "CO2 from fuel burn",
     aircraftIcaoCode,
-    aircraftIataCode,
   };
   if (!aircraftIcaoCode) {
     const estimate = { ...base, totalCo2eKg: null, unsupportedReason: "aircraft_not_supported" };
@@ -3620,7 +3601,7 @@ function estimateCombinedEmissions(row, options = {}) {
   const estimateCache = options.estimateCache || null;
   const profileCache = options.profileCache || null;
   const atimEstimateCache = options.atimEstimateCache || null;
-  const { aircraftIcaoCode, aircraftIcaoCodeBasis, aircraftIataCode, curve } = eurocontrolCurveForRow(row);
+  const { aircraftIcaoCode, aircraftIcaoCodeBasis, curve } = eurocontrolCurveForRow(row);
   const routeCacheKey = routeDistanceCacheKey(row);
   const atimProfile = selectAircraftProfile(row, profileCache);
   const estimateCacheKey = estimateCache
@@ -3643,7 +3624,6 @@ function estimateCombinedEmissions(row, options = {}) {
     scope: "whole_flight",
     scopeLabel: "Whole flight",
     aircraftIcaoCode,
-    aircraftIataCode,
   };
   let estimate = null;
   if (useEurocontrolCurve && routeDistance) {
@@ -3698,7 +3678,6 @@ function estimateCombinedEmissions(row, options = {}) {
         ...fallback,
         gasBasis: includeWellToTank ? "ATIM fuel burn plus Jet A well-to-tank factor" : "ATIM fuel burn",
         aircraftIcaoCode,
-        aircraftIataCode,
         fallbackReason,
       };
     }
@@ -3718,95 +3697,17 @@ function emissionsMethodologyMeta(methodology) {
   return EMISSIONS_METHODOLOGY_LABELS.get(methodology) || { value: methodology, label: methodology };
 }
 
-function isGhgcMethodology(methodology) {
-  return GHGC_METHODOLOGY_VALUES.has(methodology);
-}
-
-function isEurocontrolFastMethodology(methodology) {
-  return methodology === EUROCONTROL_FAST_METHODOLOGY;
-}
-
 function isCombinedMethodology(methodology) {
   return methodology === COMBINED_METHODOLOGY;
 }
 
-function isEurocontrolTtwOnlyMethodology(methodology) {
-  return isGhgcMethodology(methodology) || isEurocontrolFastMethodology(methodology);
-}
-
-function hasSplitEmissionsComponents(methodology) {
-  return methodology === "adapted_tim" || isCombinedMethodology(methodology);
-}
-
-function ghgcPythonExecutable() {
-  if (process.env.PYTHON) return process.env.PYTHON;
-  const localPython = path.join(ROOT_DIR, ".venv", "bin", "python");
-  return fs.existsSync(localPython) ? localPython : "python3";
-}
-
-function rowToGhgcEvent(row) {
-  return {
-    eventId: row.event_id,
-    manufacturer: row.manufacturer,
-    model: row.model,
-    aircraftType: row.aircraft_type,
-    origin: {
-      code: row.takeoff_airport_code,
-      name: row.takeoff_airport_name,
-      latitude: row.takeoff_lat_e7 === null ? null : row.takeoff_lat_e7 / 1e7,
-      longitude: row.takeoff_lon_e7 === null ? null : row.takeoff_lon_e7 / 1e7,
-    },
-    destination: {
-      code: row.landing_airport_code,
-      name: row.landing_airport_name,
-      latitude: row.landing_lat_e7 === null ? null : row.landing_lat_e7 / 1e7,
-      longitude: row.landing_lon_e7 === null ? null : row.landing_lon_e7 / 1e7,
-    },
-  };
-}
-
-function estimateGhgcEmissions(rows, methodology) {
-  const bridgePath = path.join(__dirname, "ghgc_bridge.py");
-  const input = JSON.stringify({
-    methodology,
-    events: rows.map(rowToGhgcEvent),
-  });
-  const result = spawnSync(ghgcPythonExecutable(), [bridgePath], {
-    input,
-    encoding: "utf8",
-    maxBuffer: 128 * 1024 * 1024,
-    env: { ...process.env, PJET_EUROCONTROL_CURVES: EUROCONTROL_CURVES_PATH },
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    const details = String(result.stderr || result.stdout || "").trim();
-    throw new Error(details ? `GHGC emissions failed: ${details}` : "GHGC emissions failed");
-  }
-  const payload = JSON.parse(result.stdout || "{}");
-  return Array.isArray(payload.estimates) ? payload.estimates : [];
-}
-
 function summarizeEmissionsForList(emissions) {
   if (!emissions) return null;
-  if (emissions.methodology === "adapted_tim") {
-    if (!Number.isFinite(emissions.totalCo2eKg)) return null;
-    return {
-      profile: emissions.profile,
-      totalCo2eKg: roundNumber(emissions.totalCo2eKg),
-      tankToWakeCo2eKg: roundNumber(emissions.tankToWakeCo2eKg),
-      wellToTankCo2eKg: roundNumber(emissions.wellToTankCo2eKg),
-      flightTimeHours: emissions.flightTimeHours,
-      burnGph: emissions.burnGph,
-    };
-  }
   if (isCombinedMethodology(emissions.methodology)) {
     return {
       profile: emissions.profile,
       profileSource: emissions.profileSource,
       aircraftIcaoCode: emissions.aircraftIcaoCode,
-      aircraftIataCode: emissions.aircraftIataCode,
       totalCo2eKg: roundNumber(emissions.totalCo2eKg),
       tankToWakeCo2eKg: roundNumber(emissions.tankToWakeCo2eKg),
       wellToTankCo2eKg: roundNumber(emissions.wellToTankCo2eKg),
@@ -3817,22 +3718,14 @@ function summarizeEmissionsForList(emissions) {
       gasBasis: emissions.gasBasis,
     };
   }
-  if (isEurocontrolTtwOnlyMethodology(emissions.methodology)) {
-    return {
-      aircraftIcaoCode: emissions.aircraftIcaoCode,
-      aircraftIataCode: emissions.aircraftIataCode,
-      totalCo2eKg: roundNumber(emissions.totalCo2eKg),
-      scope: emissions.scope,
-      scopeLabel: emissions.scopeLabel,
-      gasBasis: emissions.gasBasis,
-      calculationSource: emissions.calculationSource,
-      unsupportedReason: emissions.unsupportedReason,
-    };
-  }
-  if (!Number.isFinite(emissions.totalCo2eKg)) return null;
   return {
     aircraftIcaoCode: emissions.aircraftIcaoCode,
     totalCo2eKg: roundNumber(emissions.totalCo2eKg),
+    scope: emissions.scope,
+    scopeLabel: emissions.scopeLabel,
+    gasBasis: emissions.gasBasis,
+    calculationSource: emissions.calculationSource,
+    unsupportedReason: emissions.unsupportedReason,
   };
 }
 
@@ -3843,13 +3736,6 @@ function summarizeEmissionsForDetail(emissions) {
     if (key.endsWith("Co2eKg")) rest[key] = roundNumber(value);
   }
   return rest;
-}
-
-function gphSourceForCounts(counts) {
-  if (counts.modelSpecificGphCount && counts.placeholderGphCount) return "mixed";
-  if (counts.modelSpecificGphCount) return "ground_truth";
-  if (counts.placeholderGphCount) return "placeholder";
-  return "unavailable";
 }
 
 function sourceDomain(source) {
@@ -3878,17 +3764,11 @@ function buildModelGroups(rows, estimates, emissionsSummary) {
         wellToTankCo2eKg: 0,
         totalWithoutWellToTankCo2eKg: 0,
         totalWithWellToTankCo2eKg: 0,
-        totalFuelGallons: 0,
-        totalFlightTimeHours: 0,
         eventCount: 0,
         estimatedEventCount: 0,
-        modelSpecificGphCount: 0,
-        placeholderGphCount: 0,
-        unknownGphSourceCount: 0,
         eurocontrolCurveCount: 0,
         atimDerivedCurveCount: 0,
         fallbackReasonCounts: {},
-        gphSourceDomains: new Set(),
       };
     current.eventCount += 1;
     if (emissions && Number.isFinite(emissions.totalCo2eKg)) {
@@ -3903,21 +3783,6 @@ function buildModelGroups(rows, estimates, emissionsSummary) {
     if (Number.isFinite(emissions?.totalWithWellToTankCo2eKg)) {
       current.totalWithWellToTankCo2eKg += emissions.totalWithWellToTankCo2eKg;
     }
-    if (
-      Number.isFinite(emissions?.totalFuelGallons) &&
-      Number.isFinite(emissions?.flightTimeHours) &&
-      emissions.flightTimeHours > 0
-    ) {
-      current.totalFuelGallons += emissions.totalFuelGallons;
-      current.totalFlightTimeHours += emissions.flightTimeHours;
-    }
-    if (emissions?.profileSource === "model_match") {
-      current.modelSpecificGphCount += 1;
-    } else if (emissions?.profileSource === "business_jet_fallback") {
-      current.placeholderGphCount += 1;
-    } else if (emissions) {
-      current.unknownGphSourceCount += 1;
-    }
     if (emissions?.calculationSource === "eurocontrol_curve") {
       current.eurocontrolCurveCount += 1;
     } else if (emissions?.calculationSource === "atim_derived_curve") {
@@ -3926,8 +3791,6 @@ function buildModelGroups(rows, estimates, emissionsSummary) {
     if (emissions?.fallbackReason) {
       current.fallbackReasonCounts[emissions.fallbackReason] = (current.fallbackReasonCounts[emissions.fallbackReason] || 0) + 1;
     }
-    const domain = emissions?.fuelSourceDomain || sourceDomain(emissions?.fuelSource);
-    if (domain) current.gphSourceDomains.add(domain);
     groups.set(key, current);
   }
 
@@ -3939,7 +3802,7 @@ function buildModelGroups(rows, estimates, emissionsSummary) {
       totalCo2eKg: group.estimatedEventCount ? roundNumber(group.totalCo2eKg) : null,
       methodology: emissionsSummary.methodology,
     };
-    if (!hasSplitEmissionsComponents(emissionsSummary.methodology)) {
+    if (!isCombinedMethodology(emissionsSummary.methodology)) {
       return {
         ...base,
         eurocontrolCurveCount: group.eurocontrolCurveCount || undefined,
@@ -3956,10 +3819,6 @@ function buildModelGroups(rows, estimates, emissionsSummary) {
       eurocontrolCurveCount: group.eurocontrolCurveCount || undefined,
       atimDerivedCurveCount: group.atimDerivedCurveCount || undefined,
       fallbackReasonCounts: Object.keys(group.fallbackReasonCounts).length ? group.fallbackReasonCounts : undefined,
-      totalHours: group.totalFlightTimeHours > 0 ? group.totalFlightTimeHours : null,
-      gph: group.totalFlightTimeHours > 0 ? group.totalFuelGallons / group.totalFlightTimeHours : null,
-      gphSource: gphSourceForCounts(group),
-      gphSourceDomains: [...group.gphSourceDomains].sort(),
     };
   });
 }
@@ -3980,125 +3839,61 @@ function summarizeEmissionsForEstimates(rows, estimates, methodology, includeWel
     };
   }
 
-  if (isEurocontrolFastMethodology(methodology) || isCombinedMethodology(methodology)) {
-    const meta = emissionsMethodologyMeta(methodology);
-    let totalCo2eKg = 0;
-    let tankToWakeCo2eKg = 0;
-    let wellToTankCo2eKg = 0;
-    let totalWithoutWellToTankCo2eKg = 0;
-    let totalWithWellToTankCo2eKg = 0;
-    let estimatedEventCount = 0;
-    const unsupportedReasonCounts = {};
-    const fallbackReasonCounts = {};
-    const calculationSourceCounts = {};
-    for (const estimate of estimates) {
-      if (estimate && Number.isFinite(estimate.totalCo2eKg)) {
-        totalCo2eKg += estimate.totalCo2eKg;
-        if (Number.isFinite(estimate.tankToWakeCo2eKg)) tankToWakeCo2eKg += estimate.tankToWakeCo2eKg;
-        if (Number.isFinite(estimate.wellToTankCo2eKg)) wellToTankCo2eKg += estimate.wellToTankCo2eKg;
-        if (Number.isFinite(estimate.totalWithoutWellToTankCo2eKg)) {
-          totalWithoutWellToTankCo2eKg += estimate.totalWithoutWellToTankCo2eKg;
-        } else {
-          totalWithoutWellToTankCo2eKg += estimate.totalCo2eKg;
-        }
-        if (Number.isFinite(estimate.totalWithWellToTankCo2eKg)) {
-          totalWithWellToTankCo2eKg += estimate.totalWithWellToTankCo2eKg;
-        } else {
-          totalWithWellToTankCo2eKg += estimate.totalCo2eKg;
-        }
-        estimatedEventCount += 1;
-        if (estimate.calculationSource) {
-          calculationSourceCounts[estimate.calculationSource] = (calculationSourceCounts[estimate.calculationSource] || 0) + 1;
-        }
-        if (estimate.fallbackReason) {
-          fallbackReasonCounts[estimate.fallbackReason] = (fallbackReasonCounts[estimate.fallbackReason] || 0) + 1;
-        }
-      } else {
-        const reason = estimate?.unsupportedReason || "unsupported";
-        unsupportedReasonCounts[reason] = (unsupportedReasonCounts[reason] || 0) + 1;
-      }
-    }
-    const splitComponents = hasSplitEmissionsComponents(methodology);
-    return {
-      methodology,
-      label: meta.label,
-      scope: "whole_flight",
-      scopeLabel: "Whole flight",
-      gasBasis: splitComponents && includeWellToTank ? "CO2 from fuel burn plus Jet A well-to-tank factor" : "CO2 from fuel burn",
-      includeWellToTank,
-      tankToWakeCo2eKg: splitComponents ? roundNumber(tankToWakeCo2eKg) : null,
-      wellToTankCo2eKg: splitComponents ? roundNumber(wellToTankCo2eKg) : null,
-      totalWithoutWellToTankCo2eKg: roundNumber(totalWithoutWellToTankCo2eKg),
-      totalWithWellToTankCo2eKg: roundNumber(totalWithWellToTankCo2eKg),
-      totalCo2eKg: roundNumber(totalCo2eKg),
-      estimatedEventCount,
-      missingEventCount: rows.length - estimatedEventCount,
-      unsupportedReasonCounts,
-      calculationSourceCounts,
-      fallbackReasonCounts,
-    };
-  }
-
-  if (isGhgcMethodology(methodology)) {
-    const meta = emissionsMethodologyMeta(methodology);
-    let totalCo2eKg = 0;
-    let estimatedEventCount = 0;
-    const unsupportedReasonCounts = {};
-    for (const estimate of estimates) {
-      if (estimate && Number.isFinite(estimate.totalCo2eKg)) {
-        totalCo2eKg += estimate.totalCo2eKg;
-        estimatedEventCount += 1;
-      } else {
-        const reason = estimate?.unsupportedReason || "unsupported";
-        unsupportedReasonCounts[reason] = (unsupportedReasonCounts[reason] || 0) + 1;
-      }
-    }
-    return {
-      methodology,
-      label: meta.label,
-      scope: "whole_flight",
-      scopeLabel: "Whole flight",
-      gasBasis: "CO2 from fuel burn",
-      includeWellToTank,
-      tankToWakeCo2eKg: null,
-      wellToTankCo2eKg: null,
-      totalWithoutWellToTankCo2eKg: roundNumber(totalCo2eKg),
-      totalWithWellToTankCo2eKg: roundNumber(totalCo2eKg),
-      totalCo2eKg: roundNumber(totalCo2eKg),
-      estimatedEventCount,
-      missingEventCount: rows.length - estimatedEventCount,
-      unsupportedReasonCounts,
-    };
-  }
-
+  const meta = emissionsMethodologyMeta(methodology);
   let totalCo2eKg = 0;
   let tankToWakeCo2eKg = 0;
   let wellToTankCo2eKg = 0;
   let totalWithoutWellToTankCo2eKg = 0;
   let totalWithWellToTankCo2eKg = 0;
   let estimatedEventCount = 0;
+  const unsupportedReasonCounts = {};
+  const fallbackReasonCounts = {};
+  const calculationSourceCounts = {};
   for (const estimate of estimates) {
-    if (estimate) {
+    if (estimate && Number.isFinite(estimate.totalCo2eKg)) {
       totalCo2eKg += estimate.totalCo2eKg;
-      tankToWakeCo2eKg += estimate.tankToWakeCo2eKg;
-      wellToTankCo2eKg += estimate.wellToTankCo2eKg;
-      totalWithoutWellToTankCo2eKg += estimate.totalWithoutWellToTankCo2eKg;
-      totalWithWellToTankCo2eKg += estimate.totalWithWellToTankCo2eKg;
+      if (Number.isFinite(estimate.tankToWakeCo2eKg)) tankToWakeCo2eKg += estimate.tankToWakeCo2eKg;
+      if (Number.isFinite(estimate.wellToTankCo2eKg)) wellToTankCo2eKg += estimate.wellToTankCo2eKg;
+      if (Number.isFinite(estimate.totalWithoutWellToTankCo2eKg)) {
+        totalWithoutWellToTankCo2eKg += estimate.totalWithoutWellToTankCo2eKg;
+      } else {
+        totalWithoutWellToTankCo2eKg += estimate.totalCo2eKg;
+      }
+      if (Number.isFinite(estimate.totalWithWellToTankCo2eKg)) {
+        totalWithWellToTankCo2eKg += estimate.totalWithWellToTankCo2eKg;
+      } else {
+        totalWithWellToTankCo2eKg += estimate.totalCo2eKg;
+      }
       estimatedEventCount += 1;
+      if (estimate.calculationSource) {
+        calculationSourceCounts[estimate.calculationSource] = (calculationSourceCounts[estimate.calculationSource] || 0) + 1;
+      }
+      if (estimate.fallbackReason) {
+        fallbackReasonCounts[estimate.fallbackReason] = (fallbackReasonCounts[estimate.fallbackReason] || 0) + 1;
+      }
+    } else {
+      const reason = estimate?.unsupportedReason || "unsupported";
+      unsupportedReasonCounts[reason] = (unsupportedReasonCounts[reason] || 0) + 1;
     }
   }
-
+  const splitComponents = isCombinedMethodology(methodology);
   return {
     methodology,
-    label: emissionsMethodologyMeta(methodology).label,
+    label: meta.label,
+    scope: "whole_flight",
+    scopeLabel: "Whole flight",
+    gasBasis: splitComponents && includeWellToTank ? "CO2 from fuel burn plus Jet A well-to-tank factor" : "CO2 from fuel burn",
     includeWellToTank,
-    tankToWakeCo2eKg: roundNumber(tankToWakeCo2eKg),
-    wellToTankCo2eKg: roundNumber(wellToTankCo2eKg),
+    tankToWakeCo2eKg: splitComponents ? roundNumber(tankToWakeCo2eKg) : null,
+    wellToTankCo2eKg: splitComponents ? roundNumber(wellToTankCo2eKg) : null,
     totalWithoutWellToTankCo2eKg: roundNumber(totalWithoutWellToTankCo2eKg),
     totalWithWellToTankCo2eKg: roundNumber(totalWithWellToTankCo2eKg),
     totalCo2eKg: roundNumber(totalCo2eKg),
     estimatedEventCount,
     missingEventCount: rows.length - estimatedEventCount,
+    unsupportedReasonCounts,
+    calculationSourceCounts,
+    fallbackReasonCounts,
   };
 }
 
@@ -4108,33 +3903,16 @@ function estimateEmissionRows(rows, methodology, options = {}) {
     return rows.map(() => null);
   }
 
-  if (isEurocontrolFastMethodology(methodology) || isCombinedMethodology(methodology)) {
-    const estimates = [];
-    const detail = options.detail === true;
-    const profileCache = ADAPTED_TIM_PROFILE_CACHE;
-    const routeCache = EUROCONTROL_ROUTE_CACHE;
-    const estimateCache = detail ? new Map() : isCombinedMethodology(methodology) ? COMBINED_ESTIMATE_CACHE : EUROCONTROL_FAST_ESTIMATE_CACHE;
-    const atimEstimateCache = detail ? new Map() : ADAPTED_TIM_ESTIMATE_CACHE;
-    for (const row of rows) {
-      const estimate = isCombinedMethodology(methodology)
-        ? estimateCombinedEmissions(row, { includeWellToTank, detail, profileCache, routeCache, estimateCache, atimEstimateCache })
-        : estimateEurocontrolFastEmissions(row, { detail, routeCache, estimateCache });
-      estimates.push(estimate);
-    }
-    return estimates;
-  }
-
-  if (isGhgcMethodology(methodology)) {
-    return estimateGhgcEmissions(rows, methodology);
-  }
-
   const estimates = [];
   const detail = options.detail === true;
   const profileCache = ADAPTED_TIM_PROFILE_CACHE;
-  const routeCache = ADAPTED_TIM_ROUTE_CACHE;
-  const estimateCache = detail ? new Map() : ADAPTED_TIM_ESTIMATE_CACHE;
+  const routeCache = EUROCONTROL_ROUTE_CACHE;
+  const estimateCache = detail ? new Map() : isCombinedMethodology(methodology) ? COMBINED_ESTIMATE_CACHE : EUROCONTROL_FAST_ESTIMATE_CACHE;
+  const atimEstimateCache = detail ? new Map() : ADAPTED_TIM_ESTIMATE_CACHE;
   for (const row of rows) {
-    const estimate = estimateAdaptedTimEmissions(row, { includeWellToTank, profileCache, routeCache, estimateCache, detail });
+    const estimate = isCombinedMethodology(methodology)
+      ? estimateCombinedEmissions(row, { includeWellToTank, detail, profileCache, routeCache, estimateCache, atimEstimateCache })
+      : estimateEurocontrolFastEmissions(row, { detail, routeCache, estimateCache });
     estimates.push(estimate);
   }
   return estimates;

@@ -23,14 +23,11 @@ credential hashes and session-signing material.
 - Node.js 20 or newer
 - A running [adsbfi-proxy](https://github.com/kylemcdonald/adsbfi-proxy)
   installation and its database directory
-- Python 3.12 or newer with [uv](https://docs.astral.sh/uv/), only for the
-  optional EUROCONTROL Slow Model
 
 Install the application dependencies:
 
 ```sh
 npm ci
-uv sync   # optional, for the EUROCONTROL Slow Model
 ```
 
 ## Configuration
@@ -62,13 +59,25 @@ A flight matches a query when its takeoff is at a selected airport within the
 time range, or its landing is. A flight's ID is its takeoff movement's
 `endpoint_id` in the adsbfi-proxy ledger.
 
+## Emissions models
+
+PJET offers two emissions models, both computed in the Node server and described
+in [docs/emissions-models.md](docs/emissions-models.md):
+
+- **Combined Model** (the default): the EUROCONTROL SET fuel curve for the
+  aircraft's ICAO type plus a well-to-tank component, falling back to a
+  per-aircraft profile from published fuel-burn and speed figures when the type
+  has no curve.
+- **EUROCONTROL Fast Model**: the SET fuel curve alone, CO2 from fuel burn only.
+
 ## Optional EUROCONTROL SET curves
 
 PJET does not redistribute EUROCONTROL Small Emitters Tool workbooks or derived
 fuel-curve data. EUROCONTROL states that SET equations are subject to a specific
 [data-use agreement](https://www.eurocontrol.int/publication/small-emitters-tool-set-2023).
 If you have obtained the workbook under terms that allow your use, export an ignored
-local CSV and configure it before starting the server:
+local CSV and configure it before starting the server (the export needs Python and
+[uv](https://docs.astral.sh/uv/)):
 
 ```sh
 uv run --with openpyxl python scripts/export-eurocontrol-set-csv.py \
@@ -79,17 +88,14 @@ export PJET_EUROCONTROL_CURVES="$PWD/data/eurocontrol.csv"
 
 `data/eurocontrol.csv` is also the default local path, so the export command works
 without the environment variable when run from the repository root. Without an
-available local curve file, PJET still supports the Adapted Travel Impact Model and
-the Combined Model's ATIM fallback; the EUROCONTROL Fast and Slow choices are
-omitted.
+available local curve file, the Combined Model estimates every flight from its
+aircraft profile and the EUROCONTROL Fast Model is not offered.
 
 ## Third-party data and privacy
 
-The vendored `flight-emissions` code is Apache-2.0, but its bundled datasets retain
-their own provenance and licensing. For example, the OpenFlights airport database is
-published under the Open Database License and may require attribution and a compatible
-license for public database derivatives. Review every upstream dataset and its current
-terms before distributing a generated database or offering it through a public API.
+The adsbfi-proxy databases combine several public datasets, each with its own
+provenance and licensing; see adsbfi-proxy's README. Review their current terms
+before distributing a generated database or offering it through a public API.
 
 The FAA import can include registrant names and location fields. Even when a source is
 public, decide deliberately whether exposing those fields is appropriate for your

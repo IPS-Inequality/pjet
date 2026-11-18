@@ -1,13 +1,12 @@
 # Emissions Models
 
 This document describes the per-flight emissions models implemented in
-`server/index.js`: the **Adapted Travel Impact Model (ATIM)**, the optional
-**EUROCONTROL Fast Model**, and the **Combined Model**. It is written so that each
-model can be reimplemented from the description alone, and each section ends with a
-fully worked example for a single flight.
-
-(A fourth methodology, the "EUROCONTROL Slow Model", delegates to the vendored
-`flight-emissions` Python package via `server/ghgc_bridge.py` and is not covered here.)
+`server/index.js`: the optional **EUROCONTROL Fast Model** and the **Combined
+Model**. The Combined Model falls back to the **Adapted Travel Impact Model
+(ATIM)**, a per-aircraft profile estimate, which is not offered as a model of its
+own. It is written so that each calculation can be reimplemented from the
+description alone, and each section ends with a fully worked example for a single
+flight.
 
 ## Shared inputs and constants
 
@@ -88,9 +87,10 @@ compute both components; the toggle only controls which total is reported as
 
 ---
 
-## 1. Adapted Travel Impact Model (ATIM, `adapted_tim`)
+## 1. Adapted Travel Impact Model (ATIM)
 
-ATIM estimates fuel burn from a per-aircraft-model cruise fuel rate and cruise speed,
+ATIM is used only inside the Combined Model, for aircraft without a usable
+EUROCONTROL curve (see section 3). It estimates fuel burn from a per-aircraft-model cruise fuel rate and cruise speed,
 sourced from public specifications. Profiles and their citations are listed in
 [`emissions_profiles.md`](emissions_profiles.md).
 
@@ -230,9 +230,7 @@ The CSV is exported from the official SET workbook's hidden `Data` sheet by
 `scripts/export-eurocontrol-set-csv.py`. At load time the server replaces any
 `CO2_COEFF ≥ 3.15` with **3.16** — the EU/EEA/Swiss ETS Jet A conversion factor in
 force since January 2024 — mirroring the SET v5.15 calculator, which substitutes the
-selected jet/turboprop factor and leaves the 3.10 piston factor untouched. (The
-vendored Python package behind the Slow Model reads the same configured CSV, but it
-applies the per-row coefficients without this override.)
+selected jet/turboprop factor and leaves the 3.10 piston factor untouched.
 
 A resolved ICAO code with no CSV row → unsupported (`aircraft_not_in_method_dataset`).
 
@@ -359,9 +357,9 @@ For contrast, if this aircraft had *not* had a SET curve, the fallback would com
 
 ---
 
-## Comparing the three models
+## Comparing the calculations
 
-| | ATIM | EUROCONTROL Fast | Combined |
+| | ATIM (Combined fallback only) | EUROCONTROL Fast | Combined |
 | --- | --- | --- | --- |
 | Fuel basis | cruise gph × time + LTO allowance | SET piecewise distance curve | SET curve, else ATIM fallback |
 | Distance uplift | GC × 1.052 | GC + 95 km | matches whichever branch is used |
@@ -375,7 +373,7 @@ CO₂ only, so ATIM runs slightly "hotter" per kg of fuel. Second, within the Co
 Model a fleet can mix `eurocontrol_curve` and `atim_derived_curve` flights; the
 `calculationSource` field on each estimate says which path produced it.
 
-For the example flight the three models land at 5352 kg (ATIM, with well-to-tank),
+For the example flight the three calculations land at 5352 kg (ATIM, with well-to-tank),
 4266 kg (EUROCONTROL, combustion only), and 5139 kg (Combined, with well-to-tank) —
 differences driven almost entirely by the well-to-tank component and the two distance
 corrections, with the SET 2025 curve estimating about 3% less fuel burn than the
